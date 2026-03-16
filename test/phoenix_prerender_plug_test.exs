@@ -107,4 +107,149 @@ defmodule PhoenixPrerender.PlugTest do
       assert conn.status == 200
     end
   end
+
+  describe "cache serving" do
+    setup do
+      start_supervised!(PhoenixPrerender.PageCache)
+      on_exit(fn -> PhoenixPrerender.PageCache.clear() end)
+      :ok
+    end
+
+    test "serves from cache when page is cached" do
+      PhoenixPrerender.PageCache.put("/cached", "<html>Cached Page</html>")
+
+      conn =
+        build_conn(:get, "/cached")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert conn.resp_body == "<html>Cached Page</html>"
+      assert get_resp_header(conn, "x-prerendered") == ["true"]
+    end
+
+    test "prefers cache over disk" do
+      write_prerendered("/about", "<html>Disk Version</html>")
+      PhoenixPrerender.PageCache.put("/about", "<html>Cache Version</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.resp_body == "<html>Cache Version</html>"
+    end
+
+    test "falls back to disk when not in cache" do
+      write_prerendered("/about", "<html>Disk Version</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+  end
+
+  describe "ISR stale-while-revalidate" do
+    setup do
+      start_supervised!(PhoenixPrerender.PageCache)
+      start_supervised!({PhoenixPrerender.Regenerator, endpoint: PhoenixPrerenderWeb.Endpoint})
+
+      # Enable ISR with a very short revalidation for testing
+      original_isr = Application.get_env(:phoenix_prerender, :isr)
+      original_revalidate = Application.get_env(:phoenix_prerender, :revalidate)
+
+      Application.put_env(:phoenix_prerender, :isr, true)
+      Application.put_env(:phoenix_prerender, :revalidate, 0)
+
+      on_exit(fn ->
+        if original_isr,
+          do: Application.put_env(:phoenix_prerender, :isr, original_isr),
+          else: Application.delete_env(:phoenix_prerender, :isr)
+
+        if original_revalidate,
+          do: Application.put_env(:phoenix_prerender, :revalidate, original_revalidate),
+          else: Application.delete_env(:phoenix_prerender, :revalidate)
+
+        PhoenixPrerender.PageCache.clear()
+      end)
+
+      :ok
+    end
+
+    test "serves stale file from disk and triggers regeneration" do
+      write_prerendered("/about", "<html>Stale About</html>")
+
+      # Make the file old by backdating mtime
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(endpoint: PhoenixPrerenderWeb.Endpoint)
+
+      # Stale content is served immediately
+      assert conn.halted
+      assert conn.status == 200
+
+      # Give background task a moment to run
+      Process.sleep(100)
+    end
+
+    test "serves stale cache entry and triggers regeneration" do
+      # Put a cache entry with an old cached_at timestamp
+      old_time = System.monotonic_time() - System.convert_time_unit(600, :second, :native)
+      PhoenixPrerender.PageCache.put("/about", "<html>Stale Cached</html>")
+
+      # Manually backdate the cache entry
+      :ets.insert(
+        :phoenix_prerender_page_cache,
+        {"/about", "<html>Stale Cached</html>", %{cached_at: old_time}}
+      )
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(endpoint: PhoenixPrerenderWeb.Endpoint)
+
+      # Stale content is served immediately
+      assert conn.halted
+      assert conn.status == 200
+      assert conn.resp_body == "<html>Stale Cached</html>"
+
+      # Give background task a moment
+      Process.sleep(100)
+    end
+
+    test "does not trigger regeneration when ISR disabled" do
+      Application.put_env(:phoenix_prerender, :isr, false)
+
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(endpoint: PhoenixPrerenderWeb.Endpoint)
+
+      # Serves the page but no regeneration triggered
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "does not trigger regeneration without endpoint" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug()
+
+      # Serves the page, no crash even without endpoint
+      assert conn.halted
+      assert conn.status == 200
+    end
+  end
 end

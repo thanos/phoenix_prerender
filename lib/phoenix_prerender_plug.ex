@@ -1,11 +1,32 @@
 defmodule PhoenixPrerender.Plug do
   @moduledoc """
-  Plug that serves prerendered static HTML files when available.
+  Plug that serves prerendered HTML pages with optional ISR support.
 
-  When a request matches a prerendered page on disk, this plug serves
-  the file directly with appropriate HTTP headers and halts the
-  connection. Otherwise, the request passes through to the rest of the
-  Phoenix pipeline (router, controllers, LiveViews).
+  When a request matches a prerendered page, this plug serves it directly
+  with appropriate HTTP headers and halts the connection. Otherwise, the
+  request passes through to the rest of the Phoenix pipeline.
+
+  ## Serving Order
+
+  The plug checks for content in this order:
+
+    1. **Memory cache** -- if `PhoenixPrerender.PageCache` is running,
+       check ETS for the requested path
+    2. **Disk** -- check for a prerendered file at the expected path
+    3. **Pass-through** -- let the request continue to the Phoenix router
+
+  ## Incremental Static Regeneration (ISR)
+
+  When ISR is enabled (`config :phoenix_prerender, isr: true`), the plug
+  implements the **stale-while-revalidate** pattern:
+
+    1. Serve the existing content immediately (stale is OK)
+    2. If the content is older than `revalidate` seconds, trigger a
+       background regeneration via `PhoenixPrerender.Regenerator`
+    3. The next request gets the fresh content
+
+  This means users always get an instant response — they never wait for
+  a page to re-render.
 
   ## Setup
 
@@ -27,16 +48,14 @@ defmodule PhoenixPrerender.Plug do
       # config/prod.exs
       config :phoenix_prerender, enabled: true
 
-  ## How It Works
+  For ISR, also pass the endpoint and enable ISR:
 
-  For each incoming request, the plug:
+      plug PhoenixPrerender.Plug, endpoint: MyAppWeb.Endpoint
 
-    1. Checks if prerendering is enabled (skips if disabled)
-    2. Normalizes the request path (strips trailing slashes, query strings)
-    3. Validates the path is safe (rejects directory traversal)
-    4. Computes the expected file path using the configured URL style
-    5. If the file exists on disk, serves it with `send_file/5` and halts
-    6. If not, passes the connection through unchanged
+      config :phoenix_prerender,
+        enabled: true,
+        isr: true,
+        revalidate: 300
 
   ## Response Headers
 
@@ -54,6 +73,7 @@ defmodule PhoenixPrerender.Plug do
         output_path: "priv/static/prerendered",
         url_style: :dir_index,
         cache_control: "public, max-age=3600",
+        endpoint: MyAppWeb.Endpoint,
         enabled: true
 
   ## Telemetry
@@ -61,7 +81,7 @@ defmodule PhoenixPrerender.Plug do
   Emits `[:phoenix_prerender, :serve]` when a page is served with:
 
     * Measurements: `%{duration: native_time}`
-    * Metadata: `%{path: String.t(), source: :disk}`
+    * Metadata: `%{path: String.t(), source: :disk | :cache}`
   """
 
   @behaviour Plug
@@ -79,6 +99,8 @@ defmodule PhoenixPrerender.Plug do
       (default: from application config)
     * `:enabled` -- whether the plug is active
       (default: from application config)
+    * `:endpoint` -- the Phoenix endpoint module, required for ISR
+      regeneration (default: `nil`)
   """
   @impl true
   def init(opts) do
@@ -86,16 +108,20 @@ defmodule PhoenixPrerender.Plug do
       output_path: Keyword.get(opts, :output_path),
       url_style: Keyword.get(opts, :url_style),
       cache_control: Keyword.get(opts, :cache_control),
-      enabled: Keyword.get(opts, :enabled)
+      enabled: Keyword.get(opts, :enabled),
+      endpoint: Keyword.get(opts, :endpoint)
     }
   end
 
   @doc """
-  Serves a prerendered file if one exists for the request path.
+  Serves a prerendered page if one exists for the request path.
 
-  When the plug is disabled or no matching file exists, the connection
-  is returned unchanged. When a file is served, the connection is
-  halted after sending.
+  When the plug is disabled or no matching content exists, the connection
+  is returned unchanged. When a page is served, the connection is halted
+  after sending.
+
+  When ISR is enabled, stale content is served immediately while a
+  background task regenerates the page.
   """
   @impl true
   def call(conn, opts) do
@@ -113,27 +139,80 @@ defmodule PhoenixPrerender.Plug do
     path = PhoenixPrerender.Path.normalize(conn.request_path)
 
     if PhoenixPrerender.Path.safe?(path) do
-      maybe_serve_file(conn, path, opts)
+      resolve_and_serve(conn, path, opts)
     else
       conn
     end
   end
 
-  defp maybe_serve_file(conn, path, opts) do
+  defp resolve_and_serve(conn, path, opts) do
     output_path = opts.output_path || PhoenixPrerender.output_path()
     url_style = opts.url_style || PhoenixPrerender.url_style()
     cache_control = opts.cache_control || PhoenixPrerender.cache_control()
+    endpoint = opts.endpoint
 
+    # Try cache first, then disk
+    case try_cache(path) do
+      {:ok, html, metadata} ->
+        maybe_trigger_isr_from_cache(path, metadata, endpoint)
+        send_prerendered_body(conn, html, path, cache_control, :cache)
+
+      :miss ->
+        try_disk(conn, path, output_path, url_style, cache_control, endpoint)
+    end
+  end
+
+  # -- Cache layer ----------------------------------------------------------
+
+  defp try_cache(path) do
+    PhoenixPrerender.PageCache.get(path)
+  rescue
+    # PageCache not started (ETS table doesn't exist)
+    ArgumentError -> :miss
+  end
+
+  defp maybe_trigger_isr_from_cache(path, metadata, endpoint) do
+    if isr_enabled?() and endpoint do
+      revalidate = PhoenixPrerender.Regenerator.revalidate_interval()
+
+      if cache_entry_stale?(metadata, revalidate) do
+        PhoenixPrerender.Regenerator.maybe_regenerate(path, endpoint)
+      end
+    end
+  end
+
+  defp cache_entry_stale?(%{cached_at: cached_at}, revalidate_seconds) do
+    age = System.monotonic_time() - cached_at
+    age_seconds = System.convert_time_unit(age, :native, :second)
+    age_seconds >= revalidate_seconds
+  end
+
+  defp cache_entry_stale?(_, _), do: true
+
+  # -- Disk layer -----------------------------------------------------------
+
+  defp try_disk(conn, path, output_path, url_style, cache_control, endpoint) do
     file_path = PhoenixPrerender.Path.full_output_path(path, output_path, url_style)
 
     if File.exists?(file_path) do
-      send_prerendered(conn, file_path, path, cache_control)
+      maybe_trigger_isr_from_disk(path, file_path, endpoint)
+      send_prerendered_file(conn, file_path, path, cache_control)
     else
       conn
     end
   end
 
-  defp send_prerendered(conn, file_path, path, cache_control) do
+  defp maybe_trigger_isr_from_disk(path, file_path, endpoint) do
+    if isr_enabled?() and endpoint do
+      if PhoenixPrerender.Regenerator.file_stale?(file_path) do
+        PhoenixPrerender.Regenerator.maybe_regenerate(path, endpoint)
+      end
+    end
+  end
+
+  # -- Response helpers -----------------------------------------------------
+
+  defp send_prerendered_file(conn, file_path, path, cache_control) do
     start_time = System.monotonic_time()
 
     conn
@@ -151,5 +230,29 @@ defmodule PhoenixPrerender.Plug do
       )
     end)
     |> Plug.Conn.halt()
+  end
+
+  defp send_prerendered_body(conn, html, path, cache_control, source) do
+    start_time = System.monotonic_time()
+
+    conn
+    |> Plug.Conn.put_resp_content_type("text/html")
+    |> Plug.Conn.put_resp_header("cache-control", cache_control)
+    |> Plug.Conn.put_resp_header("x-prerendered", "true")
+    |> Plug.Conn.send_resp(200, html)
+    |> tap(fn _ ->
+      duration = System.monotonic_time() - start_time
+
+      :telemetry.execute(
+        [:phoenix_prerender, :serve],
+        %{duration: duration},
+        %{path: path, source: source}
+      )
+    end)
+    |> Plug.Conn.halt()
+  end
+
+  defp isr_enabled? do
+    PhoenixPrerender.Regenerator.isr_enabled?()
   end
 end
