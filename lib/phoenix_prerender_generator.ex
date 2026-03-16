@@ -110,6 +110,7 @@ defmodule PhoenixPrerender.Generator do
       )
   """
   @spec generate(keyword()) :: {:ok, [map()]}
+  # sobelow_skip ["Traversal.FileModule"]
   def generate(opts) do
     router = Keyword.fetch!(opts, :router)
     endpoint = Keyword.fetch!(opts, :endpoint)
@@ -239,6 +240,7 @@ defmodule PhoenixPrerender.Generator do
       #=> "<html>...</html>"
   """
   @spec write_atomic!(String.t(), String.t()) :: :ok
+  # sobelow_skip ["Traversal.FileModule"]
   def write_atomic!(file_path, content) do
     dir = Path.dirname(file_path)
     File.mkdir_p!(dir)

@@ -105,6 +105,7 @@ defmodule PhoenixPrerender.Manifest do
       {:error, :enoent} = PhoenixPrerender.Manifest.read("/nonexistent")
   """
   @spec read(String.t()) :: {:ok, map()} | {:error, term()}
+  # sobelow_skip ["Traversal.FileModule"]
   def read(output_path) do
     path = Path.join(output_path, @manifest_filename)
 

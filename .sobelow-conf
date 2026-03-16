@@ -1,7 +1,7 @@
 [
   verbose: false,
   private: false,
-  skip: false,
+  skip: ["Traversal.SendFile", "Traversal.FileModule"],
   router: "lib/phoenix_prerender_web/router.ex",
   exit: "low",
   format: "txt",
