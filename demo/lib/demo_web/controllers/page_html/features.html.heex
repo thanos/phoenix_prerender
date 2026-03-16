@@ -13,13 +13,16 @@
       <h2 class="text-xl font-semibold text-gray-900">Build-Time Static Generation</h2>
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
-      Routes marked with <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code> are
+      Routes marked with
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code>
+      are
       discovered automatically. The generator renders each through the complete Phoenix endpoint pipeline
       using <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">Phoenix.ConnTest.dispatch/5</code>,
       ensuring all plugs, layouts, and components execute.
     </p>
     <p class="text-gray-600 leading-relaxed">
-      Pages are rendered concurrently via <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">Task.async_stream</code>
+      Pages are rendered concurrently via
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">Task.async_stream</code>
       with configurable concurrency. Default parallelism matches <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">System.schedulers_online()</code>.
     </p>
   </div>
@@ -35,12 +38,15 @@
       immediately while a background task re-renders and writes fresh HTML. Users never wait.
     </p>
     <div class="bg-amber-50 rounded-lg border border-amber-200 p-4 text-sm text-amber-800">
-      <strong>Thundering herd prevention:</strong> ETS-based locks via
-      <code class="bg-amber-100 px-1 py-0.5 rounded">insert_new/2</code> ensure only one task
+      <strong>Thundering herd prevention:</strong>
+      ETS-based locks via <code class="bg-amber-100 px-1 py-0.5 rounded">insert_new/2</code>
+      ensure only one task
       regenerates a given path at a time. The lock is released automatically when the task completes.
     </div>
     <p class="text-gray-600 leading-relaxed mt-4">
-      See it in action on the <a href="/status" class="text-amber-600 hover:text-amber-800 underline">/status</a> page.
+      See it in action on the
+      <a href="/status" class="text-amber-600 hover:text-amber-800 underline">/status</a>
+      page.
     </p>
   </div>
 
@@ -52,12 +58,14 @@
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
       When running on multiple BEAM nodes,
-      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global.trans/2</code> ensures only
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global.trans/2</code>
+      ensures only
       one node regenerates a given page. After regeneration, Phoenix PubSub broadcasts to all nodes
       so they invalidate their local ETS caches.
     </p>
     <p class="text-gray-600 leading-relaxed">
-      If the regenerating node crashes, <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global</code>
+      If the regenerating node crashes,
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global</code>
       automatically releases the lock so another node picks up the work.
     </p>
   </div>
@@ -70,7 +78,8 @@
     </div>
     <p class="text-gray-600 leading-relaxed">
       Every file write is a two-step process: write to <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">path.tmp</code>,
-      then <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">File.rename!/2</code> to the final location.
+      then <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">File.rename!/2</code>
+      to the final location.
       This is critical during ISR &mdash; the serving plug never reads a partially written file, even when
       pages are being regenerated while being served.
     </p>

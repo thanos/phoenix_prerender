@@ -9,7 +9,9 @@
   <%!-- Step 1 --%>
   <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
     <div class="flex items-center space-x-3 mb-4">
-      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">1</span>
+      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">
+        1
+      </span>
       <h2 class="text-xl font-semibold text-gray-900">Add the Dependency</h2>
     </div>
     <pre class="code-block text-sm"><code># mix.exs
@@ -23,7 +25,9 @@ end</code></pre>
   <%!-- Step 2 --%>
   <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
     <div class="flex items-center space-x-3 mb-4">
-      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">2</span>
+      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">
+        2
+      </span>
       <h2 class="text-xl font-semibold text-gray-900">Mark Routes</h2>
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
@@ -44,19 +48,26 @@ scope "/", MyAppWeb do
   get "/contact", PageController, :contact
 end</code></pre>
     <p class="mt-4 text-sm text-gray-500">
-      Or use the explicit syntax: <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">get "/about", PageController, :about, metadata: %&#123;prerender: true&#125;</code>
+      Or use the explicit syntax:
+      <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">
+        get "/about", PageController, :about, metadata: %&#123;prerender: true&#125;
+      </code>
     </p>
   </div>
 
   <%!-- Step 3 --%>
   <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
     <div class="flex items-center space-x-3 mb-4">
-      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">3</span>
+      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">
+        3
+      </span>
       <h2 class="text-xl font-semibold text-gray-900">Add the Plug</h2>
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
-      Add <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">PhoenixPrerender.Plug</code> to your
-      endpoint, <strong>before</strong> the router:
+      Add <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">PhoenixPrerender.Plug</code>
+      to your
+      endpoint, <strong>before</strong>
+      the router:
     </p>
     <pre class="code-block text-sm"><code># lib/my_app_web/endpoint.ex
 plug Plug.Static, ...
@@ -70,7 +81,9 @@ plug MyAppWeb.Router</code></pre>
   <%!-- Step 4 --%>
   <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
     <div class="flex items-center space-x-3 mb-4">
-      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">4</span>
+      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">
+        4
+      </span>
       <h2 class="text-xl font-semibold text-gray-900">Configure</h2>
     </div>
     <pre class="code-block text-sm"><code># config/prod.exs
@@ -81,7 +94,9 @@ config :phoenix_prerender,
   <%!-- Step 5 --%>
   <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
     <div class="flex items-center space-x-3 mb-4">
-      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">5</span>
+      <span class="flex-shrink-0 w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white font-bold text-sm">
+        5
+      </span>
       <h2 class="text-xl font-semibold text-gray-900">Generate</h2>
     </div>
     <pre class="code-block text-sm"><code>$ mix phoenix.prerender
@@ -89,8 +104,7 @@ config :phoenix_prerender,
 PhoenixPrerender: Discovering routes from MyAppWeb.Router...
 PhoenixPrerender: Generated 3 pages to priv/static/prerendered</code></pre>
     <p class="mt-4 text-sm text-gray-500">
-      Options: <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">--path /about</code>,
-      <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">--style file</code>,
+      Options: <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">--path /about</code>, <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">--style file</code>,
       <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">--concurrency 4</code>
     </p>
   </div>
@@ -99,19 +113,31 @@ PhoenixPrerender: Generated 3 pages to priv/static/prerendered</code></pre>
   <div class="bg-purple-50 rounded-xl border border-purple-200 p-6">
     <h3 class="text-lg font-semibold text-purple-900 mb-3">Next Steps</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <a href="/features" class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900">
+      <a
+        href="/features"
+        class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900"
+      >
         <span>&#8594;</span>
         <span>Explore all features</span>
       </a>
-      <a href="/docs/terms" class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900">
+      <a
+        href="/docs/terms"
+        class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900"
+      >
         <span>&#8594;</span>
         <span>Configuration reference</span>
       </a>
-      <a href="/status" class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900">
+      <a
+        href="/status"
+        class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900"
+      >
         <span>&#8594;</span>
         <span>See ISR in action</span>
       </a>
-      <a href="/changelog" class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900">
+      <a
+        href="/changelog"
+        class="flex items-center space-x-2 text-sm text-purple-700 hover:text-purple-900"
+      >
         <span>&#8594;</span>
         <span>LiveView prerendering</span>
       </a>

@@ -9,26 +9,26 @@
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
     <div class="bg-white rounded-xl border border-gray-200 p-6">
       <p class="text-sm text-gray-500 mb-1">BEAM Uptime</p>
-      <p class="text-2xl font-bold text-gray-900"><%= @uptime %></p>
+      <p class="text-2xl font-bold text-gray-900">{@uptime}</p>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-6">
       <p class="text-sm text-gray-500 mb-1">Process Count</p>
-      <p class="text-2xl font-bold text-gray-900"><%= @process_count %></p>
+      <p class="text-2xl font-bold text-gray-900">{@process_count}</p>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-6">
       <p class="text-sm text-gray-500 mb-1">Memory (MB)</p>
-      <p class="text-2xl font-bold text-gray-900"><%= @memory_mb %></p>
+      <p class="text-2xl font-bold text-gray-900">{@memory_mb}</p>
     </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
     <div class="bg-white rounded-xl border border-gray-200 p-6">
       <p class="text-sm text-gray-500 mb-1">Server Time</p>
-      <p class="text-xl font-mono font-bold text-gray-900"><%= @server_time %></p>
+      <p class="text-xl font-mono font-bold text-gray-900">{@server_time}</p>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-6">
       <p class="text-sm text-gray-500 mb-1">Node</p>
-      <p class="text-xl font-mono font-bold text-gray-900"><%= @node %></p>
+      <p class="text-xl font-mono font-bold text-gray-900">{@node}</p>
     </div>
   </div>
 
@@ -40,12 +40,15 @@
     </p>
     <p class="text-gray-600 leading-relaxed mb-4">
       Pages with <strong>user-specific content</strong>, <strong>real-time data</strong>, or
-      <strong>request-dependent behavior</strong> should stay dynamic. PhoenixPrerender is designed
+      <strong>request-dependent behavior</strong>
+      should stay dynamic. PhoenixPrerender is designed
       to coexist: prerendered pages are intercepted by the plug, everything else passes through
       to Phoenix as normal.
     </p>
     <div class="bg-green-50 rounded-lg border border-green-200 p-4 text-sm text-green-800">
-      <strong>Tip:</strong> Compare this page with <a href="/status" class="underline">/status</a> (ISR).
+      <strong>Tip:</strong>
+      Compare this page with <a href="/status" class="underline">/status</a>
+      (ISR).
       The status page also shows server time, but uses stale-while-revalidate &mdash; it serves
       cached content instantly and refreshes in the background.
     </div>

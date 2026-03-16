@@ -2,8 +2,7 @@
 <div class="gradient-bg">
   <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
     <h1 class="text-5xl font-extrabold text-white tracking-tight sm:text-6xl">
-      Static Prerendering
-      <br />
+      Static Prerendering <br />
       <span class="text-purple-200">for Phoenix</span>
     </h1>
     <p class="mt-6 max-w-2xl mx-auto text-xl text-purple-100 leading-relaxed">
@@ -45,12 +44,15 @@
       </div>
       <h3 class="text-lg font-semibold text-gray-900">Static at Build Time</h3>
       <p class="mt-2 text-sm text-gray-500 leading-relaxed">
-        HTML generated once via <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mix phoenix.prerender</code>
+        HTML generated once via
+        <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mix phoenix.prerender</code>
         and served directly from disk. Zero runtime cost.
       </p>
       <div class="mt-4 space-y-1">
         <a href="/about" class="block text-sm text-purple-600 hover:text-purple-800">/about</a>
-        <a href="/features" class="block text-sm text-purple-600 hover:text-purple-800">/features</a>
+        <a href="/features" class="block text-sm text-purple-600 hover:text-purple-800">
+          /features
+        </a>
         <a href="/docs" class="block text-sm text-purple-600 hover:text-purple-800">/docs/*</a>
       </div>
     </div>
@@ -66,7 +68,9 @@
         Prerendered as static HTML for instant load, then hydrated via WebSocket for interactivity.
       </p>
       <div class="mt-4">
-        <a href="/changelog" class="block text-sm text-blue-600 hover:text-blue-800">/changelog</a>
+        <a href="/changelog" class="block text-sm text-blue-600 hover:text-blue-800">
+          /changelog
+        </a>
       </div>
     </div>
 
@@ -97,7 +101,9 @@
       </p>
       <div class="mt-4 space-y-1">
         <a href="/contact" class="block text-sm text-green-600 hover:text-green-800">/contact</a>
-        <a href="/dashboard" class="block text-sm text-green-600 hover:text-green-800">/dashboard</a>
+        <a href="/dashboard" class="block text-sm text-green-600 hover:text-green-800">
+          /dashboard
+        </a>
       </div>
     </div>
   </div>
@@ -163,32 +169,44 @@ plug MyAppWeb.Router</code></pre>
     <div class="p-5 rounded-xl border border-gray-200 bg-white">
       <div class="text-2xl mb-2">&#9889;</div>
       <h3 class="font-semibold text-gray-900">Instant Response</h3>
-      <p class="mt-1 text-sm text-gray-500">Static HTML served via send_file. No database, no templates, no rendering at request time.</p>
+      <p class="mt-1 text-sm text-gray-500">
+        Static HTML served via send_file. No database, no templates, no rendering at request time.
+      </p>
     </div>
     <div class="p-5 rounded-xl border border-gray-200 bg-white">
       <div class="text-2xl mb-2">&#128260;</div>
       <h3 class="font-semibold text-gray-900">ISR</h3>
-      <p class="mt-1 text-sm text-gray-500">Stale-while-revalidate keeps pages fresh. ETS locks prevent thundering herd.</p>
+      <p class="mt-1 text-sm text-gray-500">
+        Stale-while-revalidate keeps pages fresh. ETS locks prevent thundering herd.
+      </p>
     </div>
     <div class="p-5 rounded-xl border border-gray-200 bg-white">
       <div class="text-2xl mb-2">&#127760;</div>
       <h3 class="font-semibold text-gray-900">Distributed</h3>
-      <p class="mt-1 text-sm text-gray-500">Cluster-wide locking via :global.trans. PubSub cache invalidation across nodes.</p>
+      <p class="mt-1 text-sm text-gray-500">
+        Cluster-wide locking via :global.trans. PubSub cache invalidation across nodes.
+      </p>
     </div>
     <div class="p-5 rounded-xl border border-gray-200 bg-white">
       <div class="text-2xl mb-2">&#128196;</div>
       <h3 class="font-semibold text-gray-900">Atomic Writes</h3>
-      <p class="mt-1 text-sm text-gray-500">Write to .tmp, rename to final. Readers never see partially written files.</p>
+      <p class="mt-1 text-sm text-gray-500">
+        Write to .tmp, rename to final. Readers never see partially written files.
+      </p>
     </div>
     <div class="p-5 rounded-xl border border-gray-200 bg-white">
       <div class="text-2xl mb-2">&#128200;</div>
       <h3 class="font-semibold text-gray-900">Telemetry</h3>
-      <p class="mt-1 text-sm text-gray-500">Events for generate, render, serve, and regenerate. Plug into your metrics stack.</p>
+      <p class="mt-1 text-sm text-gray-500">
+        Events for generate, render, serve, and regenerate. Plug into your metrics stack.
+      </p>
     </div>
     <div class="p-5 rounded-xl border border-gray-200 bg-white">
       <div class="text-2xl mb-2">&#128736;</div>
       <h3 class="font-semibold text-gray-900">Mix Task + CI</h3>
-      <p class="mt-1 text-sm text-gray-500">mix phoenix.prerender with --path, --style, --concurrency flags. Drop into any CI pipeline.</p>
+      <p class="mt-1 text-sm text-gray-500">
+        mix phoenix.prerender with --path, --style, --concurrency flags. Drop into any CI pipeline.
+      </p>
     </div>
   </div>
 </div>

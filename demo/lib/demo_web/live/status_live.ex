@@ -58,7 +58,9 @@ defmodule DemoWeb.StatusLive do
           <p class="text-sm text-gray-500 mb-1">Live Clock</p>
           <p class="text-xl font-mono font-bold text-blue-700">{@current_time}</p>
           <p class="text-xs text-gray-400 mt-2">
-            {if @connected, do: "Updating live via WebSocket (#{@tick_count} ticks)", else: "Will update after LiveView connects"}
+            {if @connected,
+              do: "Updating live via WebSocket (#{@tick_count} ticks)",
+              else: "Will update after LiveView connects"}
           </p>
         </div>
       </div>
@@ -68,27 +70,35 @@ defmodule DemoWeb.StatusLive do
         <h2 class="text-xl font-semibold text-gray-900 mb-4">How ISR Works on This Page</h2>
         <div class="space-y-4">
           <div class="flex items-start space-x-4">
-            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">1</span>
+            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">
+              1
+            </span>
             <div>
               <p class="font-medium text-gray-900">Build time generation</p>
               <p class="text-sm text-gray-500">
-                <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">mix phoenix.prerender</code> renders this page
+                <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">mix phoenix.prerender</code>
+                renders this page
                 and writes it to disk. The "Page Generated At" timestamp is frozen.
               </p>
             </div>
           </div>
           <div class="flex items-start space-x-4">
-            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">2</span>
+            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">
+              2
+            </span>
             <div>
               <p class="font-medium text-gray-900">First request</p>
               <p class="text-sm text-gray-500">
                 The plug serves the static file instantly. If the file is older than
-                <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">revalidate</code> seconds, a background regeneration is triggered.
+                <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">revalidate</code>
+                seconds, a background regeneration is triggered.
               </p>
             </div>
           </div>
           <div class="flex items-start space-x-4">
-            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">3</span>
+            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">
+              3
+            </span>
             <div>
               <p class="font-medium text-gray-900">Background regeneration</p>
               <p class="text-sm text-gray-500">
@@ -98,7 +108,9 @@ defmodule DemoWeb.StatusLive do
             </div>
           </div>
           <div class="flex items-start space-x-4">
-            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">4</span>
+            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">
+              4
+            </span>
             <div>
               <p class="font-medium text-gray-900">Next request</p>
               <p class="text-sm text-gray-500">

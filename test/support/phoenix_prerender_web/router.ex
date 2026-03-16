@@ -30,15 +30,4 @@ defmodule PhoenixPrerenderWeb.Router do
   # scope "/api", PhoenixPrerenderWeb do
   #   pipe_through :api
   # end
-
-  # Enable LiveDashboard in development
-  if Application.compile_env(:phoenix_prerender, :dev_routes) do
-    import Phoenix.LiveDashboard.Router
-
-    scope "/dev" do
-      pipe_through :browser
-
-      live_dashboard "/dashboard", metrics: PhoenixPrerenderWeb.Telemetry
-    end
-  end
 end
