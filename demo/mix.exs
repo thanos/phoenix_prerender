@@ -44,6 +44,4 @@ defmodule Demo.MixProject do
       "assets.deploy": ["phx.digest"]
     ]
   end
-
-
 end

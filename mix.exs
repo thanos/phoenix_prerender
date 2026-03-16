@@ -20,8 +20,6 @@ defmodule PhoenixPrerender.MixProject do
       deps: deps(),
       package: package(),
       docs: docs(),
-      compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader],
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
         coveralls: :test,
@@ -39,8 +37,7 @@ defmodule PhoenixPrerender.MixProject do
 
   def application do
     [
-      mod: {PhoenixPrerender.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger]
     ]
   end
 
@@ -55,18 +52,18 @@ defmodule PhoenixPrerender.MixProject do
 
   defp deps do
     [
-      # Runtime dependencies (shipped with the library)
+      # Runtime dependencies (used by core library modules)
       {:phoenix, "~> 1.8"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_view, "~> 1.1"},
       {:phoenix_pubsub, "~> 2.1"},
       {:jason, "~> 1.2"},
-      {:bandit, "~> 1.5"},
-      {:telemetry_metrics, "~> 1.0"},
-      {:telemetry_poller, "~> 1.0"},
-      {:gettext, "~> 1.0"},
 
-      # Dev/test host app (not shipped)
+      # Test host app (PhoenixPrerenderWeb.* in test/support)
+      {:bandit, "~> 1.5", only: [:dev, :test]},
+      {:gettext, "~> 1.0", only: [:dev, :test]},
+      {:telemetry_metrics, "~> 1.0", only: [:dev, :test]},
+      {:telemetry_poller, "~> 1.0", only: [:dev, :test]},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_dashboard, "~> 0.8.3", only: :dev},
       {:esbuild, "~> 0.10", only: :dev, runtime: false},
@@ -158,14 +155,7 @@ defmodule PhoenixPrerender.MixProject do
 
   defp aliases do
     [
-      setup: ["deps.get", "assets.setup", "assets.build"],
-      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind phoenix_prerender", "esbuild phoenix_prerender"],
-      "assets.deploy": [
-        "tailwind phoenix_prerender --minify",
-        "esbuild phoenix_prerender --minify",
-        "phx.digest"
-      ],
+      setup: ["deps.get"],
       lint: ["format --check-formatted", "credo --strict", "dialyzer"],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
       verify: &verify/1

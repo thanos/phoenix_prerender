@@ -18,8 +18,10 @@
         every time: router matching, controller dispatch, template rendering.
       </p>
       <div class="bg-green-50 rounded-lg border border-green-200 p-4 text-sm text-green-800">
-        <strong>How to keep a page dynamic:</strong> simply don't include it in a
-        <code class="bg-green-100 px-1 py-0.5 rounded">prerender do</code> block
+        <strong>How to keep a page dynamic:</strong>
+        simply don't include it in a
+        <code class="bg-green-100 px-1 py-0.5 rounded">prerender do</code>
+        block
         and don't add <code class="bg-green-100 px-1 py-0.5 rounded">metadata: %&#123;prerender: true&#125;</code>.
       </div>
     </div>
@@ -81,7 +83,10 @@ end</code></pre>
 
   <div class="mt-8 bg-gray-50 rounded-xl border border-gray-200 p-6 text-center">
     <p class="text-sm text-gray-500">
-      Server time: <strong class="text-gray-700"><%= DateTime.utc_now() |> Calendar.strftime("%H:%M:%S UTC") %></strong>
+      Server time:
+      <strong class="text-gray-700">
+        {DateTime.utc_now() |> Calendar.strftime("%H:%M:%S UTC")}
+      </strong>
     </p>
     <p class="text-xs text-gray-400 mt-1">
       Refresh the page &mdash; the time updates because this page is rendered fresh every time.

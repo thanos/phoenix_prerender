@@ -50,7 +50,10 @@ defmodule DemoWeb.Layouts do
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="flex justify-between h-14">
             <div class="flex items-center space-x-1">
-              <a href="/" class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-50 transition">
+              <a
+                href="/"
+                class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-50 transition"
+              >
                 <span class="text-lg font-bold gradient-text">PhoenixPrerender</span>
               </a>
               <span class="text-gray-300 mx-1">|</span>

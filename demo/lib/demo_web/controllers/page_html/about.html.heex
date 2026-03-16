@@ -21,7 +21,8 @@
     <p class="text-gray-600 leading-relaxed">
       For pages that need to stay fresh, incremental static regeneration (ISR) serves stale content
       immediately while regenerating in the background. ETS locks prevent duplicate work, and
-      distributed locking via <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global.trans</code>
+      distributed locking via
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global.trans</code>
       coordinates across BEAM nodes.
     </p>
   </div>
@@ -31,19 +32,36 @@
       <h3 class="text-lg font-semibold text-gray-900 mb-3">How This Page Was Built</h3>
       <ol class="space-y-3 text-sm text-gray-600">
         <li class="flex items-start space-x-3">
-          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">1</span>
-          <span>Route marked with <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">prerender do</code> in the router</span>
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">
+            1
+          </span>
+          <span>
+            Route marked with
+            <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">prerender do</code>
+            in the router
+          </span>
         </li>
         <li class="flex items-start space-x-3">
-          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">2</span>
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">
+            2
+          </span>
           <span>Generator dispatched GET /about through the full endpoint</span>
         </li>
         <li class="flex items-start space-x-3">
-          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">3</span>
-          <span>HTML written to <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">priv/static/prerendered/about/index.html</code></span>
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">
+            3
+          </span>
+          <span>
+            HTML written to
+            <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">
+              priv/static/prerendered/about/index.html
+            </code>
+          </span>
         </li>
         <li class="flex items-start space-x-3">
-          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">4</span>
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">
+            4
+          </span>
           <span>Plug intercepted request and served the file with send_file</span>
         </li>
       </ol>

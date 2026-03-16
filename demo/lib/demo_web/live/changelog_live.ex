@@ -108,7 +108,8 @@ defmodule DemoWeb.ChangelogLive do
           </button>
         </div>
         <div class="flex items-center space-x-2 text-sm">
-          <span class={"w-2 h-2 rounded-full #{if @connected, do: "bg-green-400", else: "bg-gray-300"}"}></span>
+          <span class={"w-2 h-2 rounded-full #{if @connected, do: "bg-green-400", else: "bg-gray-300"}"}>
+          </span>
           <span class={"#{if @connected, do: "text-green-600", else: "text-gray-400"}"}>
             {if @connected, do: "LiveView connected", else: "Static HTML"}
           </span>
@@ -140,15 +141,20 @@ defmodule DemoWeb.ChangelogLive do
         <h2 class="text-xl font-semibold text-blue-900 mb-4">How LiveView Prerendering Works</h2>
         <div class="space-y-3 text-sm text-blue-800">
           <p>
-            <strong>1. Build time:</strong> The generator dispatches GET /changelog through the endpoint.
-            LiveView renders the static HTML including <code class="bg-blue-100 px-1 py-0.5 rounded">data-phx-session</code> attributes.
+            <strong>1. Build time:</strong>
+            The generator dispatches GET /changelog through the endpoint.
+            LiveView renders the static HTML including
+            <code class="bg-blue-100 px-1 py-0.5 rounded">data-phx-session</code>
+            attributes.
           </p>
           <p>
-            <strong>2. First load:</strong> The browser receives pre-built HTML instantly. The page is fully
+            <strong>2. First load:</strong>
+            The browser receives pre-built HTML instantly. The page is fully
             readable and SEO-friendly before any JavaScript runs.
           </p>
           <p>
-            <strong>3. Hydration:</strong> Phoenix LiveView JavaScript connects via WebSocket. The filter
+            <strong>3. Hydration:</strong>
+            Phoenix LiveView JavaScript connects via WebSocket. The filter
             buttons above become interactive. The page is now a full LiveView.
           </p>
         </div>

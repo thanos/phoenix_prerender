@@ -5,7 +5,8 @@ config :demo, DemoWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "demo_dev_secret_key_base_that_is_at_least_64_bytes_long_for_phoenix_prerender_demo",
+  secret_key_base:
+    "demo_dev_secret_key_base_that_is_at_least_64_bytes_long_for_phoenix_prerender_demo",
   watchers: []
 
 config :phoenix_prerender,
