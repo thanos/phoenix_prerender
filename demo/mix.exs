@@ -33,7 +33,8 @@ defmodule Demo.MixProject do
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:jason, "~> 1.2"},
       {:bandit, "~> 1.5"},
-      {:phoenix_prerender, path: ".."}
+      {:phoenix_prerender, path: ".."},
+      {:benchee, "~> 1.3", only: :dev}
     ]
   end
 

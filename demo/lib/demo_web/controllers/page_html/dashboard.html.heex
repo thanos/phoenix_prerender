@@ -1,0 +1,53 @@
+<DemoWeb.Layouts.page_header
+  title="Dashboard"
+  subtitle="A dynamic page with live server information"
+  mode="dynamic"
+  mode_description="Rendered fresh on every request. Shows real-time server data that can't be prerendered."
+/>
+
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <p class="text-sm text-gray-500 mb-1">BEAM Uptime</p>
+      <p class="text-2xl font-bold text-gray-900"><%= @uptime %></p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <p class="text-sm text-gray-500 mb-1">Process Count</p>
+      <p class="text-2xl font-bold text-gray-900"><%= @process_count %></p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <p class="text-sm text-gray-500 mb-1">Memory (MB)</p>
+      <p class="text-2xl font-bold text-gray-900"><%= @memory_mb %></p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <p class="text-sm text-gray-500 mb-1">Server Time</p>
+      <p class="text-xl font-mono font-bold text-gray-900"><%= @server_time %></p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <p class="text-sm text-gray-500 mb-1">Node</p>
+      <p class="text-xl font-mono font-bold text-gray-900"><%= @node %></p>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 p-8">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Why This Page is Dynamic</h2>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      This dashboard shows live BEAM runtime data that changes every second.
+      Prerendering would freeze these values at build time, making them useless.
+    </p>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      Pages with <strong>user-specific content</strong>, <strong>real-time data</strong>, or
+      <strong>request-dependent behavior</strong> should stay dynamic. PhoenixPrerender is designed
+      to coexist: prerendered pages are intercepted by the plug, everything else passes through
+      to Phoenix as normal.
+    </p>
+    <div class="bg-green-50 rounded-lg border border-green-200 p-4 text-sm text-green-800">
+      <strong>Tip:</strong> Compare this page with <a href="/status" class="underline">/status</a> (ISR).
+      The status page also shows server time, but uses stale-while-revalidate &mdash; it serves
+      cached content instantly and refreshes in the background.
+    </div>
+  </div>
+</div>

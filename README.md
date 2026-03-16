@@ -413,6 +413,24 @@ prerender do
 end
 ```
 
+## Performance
+
+Benchmarking the same `/about` page (10.6 KB) served three ways on Apple M1 Max:
+
+| Serving Mode | Throughput | Avg Latency | Memory | vs Cache |
+|---|---|---|---|---|
+| **Prerendered (ETS cache)** | 5,000 req/s | 200 μs | 5.4 KB | — |
+| **Prerendered (disk)** | 4,040 req/s | 248 μs | 8.3 KB | 1.24x slower |
+| **Dynamic (full Phoenix pipeline)** | 45 req/s | 22,134 μs | 46.0 KB | **110x slower** |
+
+Prerendered pages serve **~110x faster** with **~8.5x less memory** than rendering dynamically through the full Phoenix pipeline (router, controller, template). The ETS cache and disk paths perform similarly thanks to OS-level file caching.
+
+Run the benchmark yourself:
+
+```bash
+cd demo && mix run bench/plug_serving_bench.exs
+```
+
 ## Module Reference
 
 | Module | Purpose |
