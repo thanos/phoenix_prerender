@@ -1,15 +1,4 @@
-# This file is responsible for configuring your application
-# and its dependencies with the aid of the Config module.
-#
-# This configuration file is loaded before any dependency and
-# is restricted to this project.
-
-# General application configuration
 import Config
-
-config :phoenix_prerender,
-  ecto_repos: [PhoenixPrerender.Repo],
-  generators: [timestamp_type: :utc_datetime]
 
 # Configure the endpoint
 config :phoenix_prerender, PhoenixPrerenderWeb.Endpoint,
@@ -21,15 +10,6 @@ config :phoenix_prerender, PhoenixPrerenderWeb.Endpoint,
   ],
   pubsub_server: PhoenixPrerender.PubSub,
   live_view: [signing_salt: "TESdAvXH"]
-
-# Configure the mailer
-#
-# By default it uses the "Local" adapter which stores the emails
-# locally. You can see the emails in your browser, at "/dev/mailbox".
-#
-# For production it's recommended to configure a different adapter
-# at the `config/runtime.exs`.
-config :phoenix_prerender, PhoenixPrerender.Mailer, adapter: Swoosh.Adapters.Local
 
 # Configure esbuild (the version is required)
 config :esbuild,

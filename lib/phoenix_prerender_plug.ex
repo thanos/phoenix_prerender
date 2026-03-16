@@ -52,36 +52,44 @@ defmodule PhoenixPrerender.Plug do
   defp serve_prerendered(conn, opts) do
     path = PhoenixPrerender.Path.normalize(conn.request_path)
 
-    unless PhoenixPrerender.Path.safe?(path) do
-      conn
+    if PhoenixPrerender.Path.safe?(path) do
+      maybe_serve_file(conn, path, opts)
     else
-      output_path = opts.output_path || PhoenixPrerender.output_path()
-      url_style = opts.url_style || PhoenixPrerender.url_style()
-      cache_control = opts.cache_control || PhoenixPrerender.cache_control()
-
-      file_path = PhoenixPrerender.Path.full_output_path(path, output_path, url_style)
-
-      if File.exists?(file_path) do
-        start_time = System.monotonic_time()
-
-        conn
-        |> Plug.Conn.put_resp_content_type("text/html")
-        |> Plug.Conn.put_resp_header("cache-control", cache_control)
-        |> Plug.Conn.put_resp_header("x-prerendered", "true")
-        |> Plug.Conn.send_file(200, file_path)
-        |> tap(fn _ ->
-          duration = System.monotonic_time() - start_time
-
-          :telemetry.execute(
-            [:phoenix_prerender, :serve],
-            %{duration: duration},
-            %{path: path, source: :disk}
-          )
-        end)
-        |> Plug.Conn.halt()
-      else
-        conn
-      end
+      conn
     end
+  end
+
+  defp maybe_serve_file(conn, path, opts) do
+    output_path = opts.output_path || PhoenixPrerender.output_path()
+    url_style = opts.url_style || PhoenixPrerender.url_style()
+    cache_control = opts.cache_control || PhoenixPrerender.cache_control()
+
+    file_path = PhoenixPrerender.Path.full_output_path(path, output_path, url_style)
+
+    if File.exists?(file_path) do
+      send_prerendered(conn, file_path, path, cache_control)
+    else
+      conn
+    end
+  end
+
+  defp send_prerendered(conn, file_path, path, cache_control) do
+    start_time = System.monotonic_time()
+
+    conn
+    |> Plug.Conn.put_resp_content_type("text/html")
+    |> Plug.Conn.put_resp_header("cache-control", cache_control)
+    |> Plug.Conn.put_resp_header("x-prerendered", "true")
+    |> Plug.Conn.send_file(200, file_path)
+    |> tap(fn _ ->
+      duration = System.monotonic_time() - start_time
+
+      :telemetry.execute(
+        [:phoenix_prerender, :serve],
+        %{duration: duration},
+        %{path: path, source: :disk}
+      )
+    end)
+    |> Plug.Conn.halt()
   end
 end

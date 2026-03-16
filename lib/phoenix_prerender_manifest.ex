@@ -66,8 +66,7 @@ defmodule PhoenixPrerender.Manifest do
 
   defp build_sitemap(entries, base_url) do
     urls =
-      entries
-      |> Enum.map(fn entry ->
+      Enum.map_join(entries, fn entry ->
         loc = String.trim_trailing(base_url, "/") <> entry.path
         lastmod = entry.generated_at
 
@@ -78,7 +77,6 @@ defmodule PhoenixPrerender.Manifest do
           </url>
         """
       end)
-      |> Enum.join()
 
     """
     <?xml version="1.0" encoding="UTF-8"?>

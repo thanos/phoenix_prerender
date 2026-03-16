@@ -82,16 +82,23 @@ defmodule PhoenixPrerender do
   defp append_private(args) do
     key = @prerender_key
     value = @prerender_value
+    metadata = Macro.escape(%{key => value})
 
     case List.last(args) do
       opts when is_list(opts) ->
-        existing = Keyword.get(opts, :metadata, %{})
-        merged = Map.put(existing, key, value)
-        new_opts = Keyword.put(opts, :metadata, merged)
-        List.replace_at(args, -1, new_opts)
+        case Keyword.get(opts, :metadata) do
+          {:%{}, _, _} = existing_map ->
+            merged = quote do: Map.put(unquote(existing_map), unquote(key), unquote(value))
+            new_opts = Keyword.put(opts, :metadata, merged)
+            List.replace_at(args, -1, new_opts)
+
+          _ ->
+            new_opts = Keyword.put(opts, :metadata, metadata)
+            List.replace_at(args, -1, new_opts)
+        end
 
       _ ->
-        args ++ [[metadata: %{key => value}]]
+        args ++ [[metadata: metadata]]
     end
   end
 
