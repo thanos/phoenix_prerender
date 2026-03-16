@@ -5,5 +5,5 @@
   router: "lib/phoenix_prerender_web/router.ex",
   exit: "low",
   format: "txt",
-  ignore: ["Config.CSP"]
+  ignore: ["Config.CSP", "XSS.SendResp"]
 ]

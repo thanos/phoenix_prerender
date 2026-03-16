@@ -1,3 +1,194 @@
-<h1>PhoenixPrerender Demo</h1>
-<p>This application demonstrates static prerendering for Phoenix.</p>
-<p>Pages marked for prerendering are generated at build time and served as static HTML.</p>
+<%!-- Hero Section --%>
+<div class="gradient-bg">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+    <h1 class="text-5xl font-extrabold text-white tracking-tight sm:text-6xl">
+      Static Prerendering
+      <br />
+      <span class="text-purple-200">for Phoenix</span>
+    </h1>
+    <p class="mt-6 max-w-2xl mx-auto text-xl text-purple-100 leading-relaxed">
+      Generate static HTML at build time. Serve instantly from disk.
+      Keep pages fresh with incremental regeneration. All on the BEAM.
+    </p>
+    <div class="mt-10 flex items-center justify-center space-x-4">
+      <a
+        href="/docs/getting-started"
+        class="px-6 py-3 bg-white text-purple-700 font-semibold rounded-lg shadow-lg hover:shadow-xl transition transform hover:-translate-y-0.5"
+      >
+        Get Started
+      </a>
+      <a
+        href="/features"
+        class="px-6 py-3 bg-purple-800 bg-opacity-50 text-white font-semibold rounded-lg border border-purple-400 border-opacity-30 hover:bg-opacity-70 transition"
+      >
+        See Features
+      </a>
+    </div>
+  </div>
+</div>
+
+<%!-- Rendering Modes Section --%>
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+  <div class="text-center mb-12">
+    <h2 class="text-3xl font-bold text-gray-900">Four Rendering Modes</h2>
+    <p class="mt-3 text-lg text-gray-500">
+      This demo showcases every rendering strategy. Each page shows its mode in the top-right badge.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <%!-- Prerendered --%>
+    <div class="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition">
+      <div class="flex items-center space-x-2 mb-4">
+        <span class="w-3 h-3 rounded-full bg-purple-400"></span>
+        <span class="text-sm font-semibold text-purple-700">Prerendered</span>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900">Static at Build Time</h3>
+      <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+        HTML generated once via <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">mix phoenix.prerender</code>
+        and served directly from disk. Zero runtime cost.
+      </p>
+      <div class="mt-4 space-y-1">
+        <a href="/about" class="block text-sm text-purple-600 hover:text-purple-800">/about</a>
+        <a href="/features" class="block text-sm text-purple-600 hover:text-purple-800">/features</a>
+        <a href="/docs" class="block text-sm text-purple-600 hover:text-purple-800">/docs/*</a>
+      </div>
+    </div>
+
+    <%!-- LiveView --%>
+    <div class="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition">
+      <div class="flex items-center space-x-2 mb-4">
+        <span class="w-3 h-3 rounded-full bg-blue-400"></span>
+        <span class="text-sm font-semibold text-blue-700">LiveView + Prerender</span>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900">Static First, Then Live</h3>
+      <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+        Prerendered as static HTML for instant load, then hydrated via WebSocket for interactivity.
+      </p>
+      <div class="mt-4">
+        <a href="/changelog" class="block text-sm text-blue-600 hover:text-blue-800">/changelog</a>
+      </div>
+    </div>
+
+    <%!-- ISR --%>
+    <div class="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition">
+      <div class="flex items-center space-x-2 mb-4">
+        <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+        <span class="text-sm font-semibold text-amber-700">ISR</span>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900">Stale-While-Revalidate</h3>
+      <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+        Serve stale content instantly while regenerating in the background. Pages stay fresh without rebuilds.
+      </p>
+      <div class="mt-4">
+        <a href="/status" class="block text-sm text-amber-600 hover:text-amber-800">/status</a>
+      </div>
+    </div>
+
+    <%!-- Dynamic --%>
+    <div class="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition">
+      <div class="flex items-center space-x-2 mb-4">
+        <span class="w-3 h-3 rounded-full bg-green-400"></span>
+        <span class="text-sm font-semibold text-green-700">Dynamic</span>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900">Server-Rendered</h3>
+      <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+        Standard Phoenix pages. Every request hits the router, controller, and template engine. No prerendering.
+      </p>
+      <div class="mt-4 space-y-1">
+        <a href="/contact" class="block text-sm text-green-600 hover:text-green-800">/contact</a>
+        <a href="/dashboard" class="block text-sm text-green-600 hover:text-green-800">/dashboard</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%!-- How It Works --%>
+<div class="bg-white border-t border-b border-gray-200">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <h2 class="text-3xl font-bold text-gray-900 text-center mb-12">How It Works</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div class="text-center">
+        <div class="w-12 h-12 mx-auto rounded-xl gradient-bg flex items-center justify-center text-white font-bold text-lg">
+          1
+        </div>
+        <h3 class="mt-4 text-lg font-semibold text-gray-900">Mark Routes</h3>
+        <p class="mt-2 text-sm text-gray-500">
+          Use the <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">prerender</code> macro
+          in your router to tag routes for static generation.
+        </p>
+        <pre class="code-block text-left text-xs"><code>prerender do
+  get "/about", PageController, :about
+  live "/changelog", ChangelogLive
+end</code></pre>
+      </div>
+
+      <div class="text-center">
+        <div class="w-12 h-12 mx-auto rounded-xl gradient-bg flex items-center justify-center text-white font-bold text-lg">
+          2
+        </div>
+        <h3 class="mt-4 text-lg font-semibold text-gray-900">Generate</h3>
+        <p class="mt-2 text-sm text-gray-500">
+          Run the Mix task to render each route through your full endpoint pipeline
+          and write HTML to disk.
+        </p>
+        <pre class="code-block text-left text-xs"><code>$ mix phoenix.prerender
+
+Generated 6 pages
+Wrote manifest.json
+Wrote sitemap.xml</code></pre>
+      </div>
+
+      <div class="text-center">
+        <div class="w-12 h-12 mx-auto rounded-xl gradient-bg flex items-center justify-center text-white font-bold text-lg">
+          3
+        </div>
+        <h3 class="mt-4 text-lg font-semibold text-gray-900">Serve</h3>
+        <p class="mt-2 text-sm text-gray-500">
+          The plug serves static files before they hit the router.
+          ISR keeps them fresh in the background.
+        </p>
+        <pre class="code-block text-left text-xs"><code># endpoint.ex
+plug PhoenixPrerender.Plug
+plug MyAppWeb.Router</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%!-- Features Grid --%>
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <div class="text-2xl mb-2">&#9889;</div>
+      <h3 class="font-semibold text-gray-900">Instant Response</h3>
+      <p class="mt-1 text-sm text-gray-500">Static HTML served via send_file. No database, no templates, no rendering at request time.</p>
+    </div>
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <div class="text-2xl mb-2">&#128260;</div>
+      <h3 class="font-semibold text-gray-900">ISR</h3>
+      <p class="mt-1 text-sm text-gray-500">Stale-while-revalidate keeps pages fresh. ETS locks prevent thundering herd.</p>
+    </div>
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <div class="text-2xl mb-2">&#127760;</div>
+      <h3 class="font-semibold text-gray-900">Distributed</h3>
+      <p class="mt-1 text-sm text-gray-500">Cluster-wide locking via :global.trans. PubSub cache invalidation across nodes.</p>
+    </div>
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <div class="text-2xl mb-2">&#128196;</div>
+      <h3 class="font-semibold text-gray-900">Atomic Writes</h3>
+      <p class="mt-1 text-sm text-gray-500">Write to .tmp, rename to final. Readers never see partially written files.</p>
+    </div>
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <div class="text-2xl mb-2">&#128200;</div>
+      <h3 class="font-semibold text-gray-900">Telemetry</h3>
+      <p class="mt-1 text-sm text-gray-500">Events for generate, render, serve, and regenerate. Plug into your metrics stack.</p>
+    </div>
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <div class="text-2xl mb-2">&#128736;</div>
+      <h3 class="font-semibold text-gray-900">Mix Task + CI</h3>
+      <p class="mt-1 text-sm text-gray-500">mix phoenix.prerender with --path, --style, --concurrency flags. Drop into any CI pipeline.</p>
+    </div>
+  </div>
+</div>

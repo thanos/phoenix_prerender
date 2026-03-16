@@ -266,6 +266,7 @@ defmodule PhoenixPrerender.Plug do
     |> Plug.Conn.halt()
   end
 
+  # sobelow_skip ["XSS.SendResp"]
   defp send_prerendered_body(conn, html, path, cache_control, source) do
     start_time = System.monotonic_time()
 

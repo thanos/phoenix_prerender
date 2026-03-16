@@ -1,8 +1,132 @@
-<h1>Features</h1>
-<ul>
-  <li>Build-time static generation</li>
-  <li>Incremental static regeneration</li>
-  <li>Distributed regeneration across BEAM nodes</li>
-  <li>ETS-based page cache</li>
-  <li>Telemetry integration</li>
-</ul>
+<DemoWeb.Layouts.page_header
+  title="Features"
+  subtitle="Everything PhoenixPrerender provides"
+  mode="prerendered"
+  mode_description="This page was generated at build time and is served as static HTML."
+/>
+
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <%!-- Feature: Static Generation --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <div class="flex items-center space-x-3 mb-4">
+      <span class="text-2xl">&#9889;</span>
+      <h2 class="text-xl font-semibold text-gray-900">Build-Time Static Generation</h2>
+    </div>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      Routes marked with <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code> are
+      discovered automatically. The generator renders each through the complete Phoenix endpoint pipeline
+      using <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">Phoenix.ConnTest.dispatch/5</code>,
+      ensuring all plugs, layouts, and components execute.
+    </p>
+    <p class="text-gray-600 leading-relaxed">
+      Pages are rendered concurrently via <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">Task.async_stream</code>
+      with configurable concurrency. Default parallelism matches <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">System.schedulers_online()</code>.
+    </p>
+  </div>
+
+  <%!-- Feature: ISR --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <div class="flex items-center space-x-3 mb-4">
+      <span class="text-2xl">&#128260;</span>
+      <h2 class="text-xl font-semibold text-gray-900">Incremental Static Regeneration</h2>
+    </div>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      ISR implements the <strong>stale-while-revalidate</strong> pattern: stale pages are served
+      immediately while a background task re-renders and writes fresh HTML. Users never wait.
+    </p>
+    <div class="bg-amber-50 rounded-lg border border-amber-200 p-4 text-sm text-amber-800">
+      <strong>Thundering herd prevention:</strong> ETS-based locks via
+      <code class="bg-amber-100 px-1 py-0.5 rounded">insert_new/2</code> ensure only one task
+      regenerates a given path at a time. The lock is released automatically when the task completes.
+    </div>
+    <p class="text-gray-600 leading-relaxed mt-4">
+      See it in action on the <a href="/status" class="text-amber-600 hover:text-amber-800 underline">/status</a> page.
+    </p>
+  </div>
+
+  <%!-- Feature: Distributed --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <div class="flex items-center space-x-3 mb-4">
+      <span class="text-2xl">&#127760;</span>
+      <h2 class="text-xl font-semibold text-gray-900">Distributed Regeneration</h2>
+    </div>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      When running on multiple BEAM nodes,
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global.trans/2</code> ensures only
+      one node regenerates a given page. After regeneration, Phoenix PubSub broadcasts to all nodes
+      so they invalidate their local ETS caches.
+    </p>
+    <p class="text-gray-600 leading-relaxed">
+      If the regenerating node crashes, <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global</code>
+      automatically releases the lock so another node picks up the work.
+    </p>
+  </div>
+
+  <%!-- Feature: Atomic Writes --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <div class="flex items-center space-x-3 mb-4">
+      <span class="text-2xl">&#128196;</span>
+      <h2 class="text-xl font-semibold text-gray-900">Atomic File Writes</h2>
+    </div>
+    <p class="text-gray-600 leading-relaxed">
+      Every file write is a two-step process: write to <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">path.tmp</code>,
+      then <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">File.rename!/2</code> to the final location.
+      This is critical during ISR &mdash; the serving plug never reads a partially written file, even when
+      pages are being regenerated while being served.
+    </p>
+  </div>
+
+  <%!-- Feature: Serving --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <div class="flex items-center space-x-3 mb-4">
+      <span class="text-2xl">&#128640;</span>
+      <h2 class="text-xl font-semibold text-gray-900">Smart Serving Plug</h2>
+    </div>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">PhoenixPrerender.Plug</code> sits in
+      your endpoint before the router. The serving order is:
+    </p>
+    <ol class="space-y-2 text-sm text-gray-600 ml-4">
+      <li><strong>1. ETS cache</strong> &mdash; in-memory lookup via PageCache</li>
+      <li><strong>2. Disk</strong> &mdash; check for static HTML file</li>
+      <li><strong>3. Pass-through</strong> &mdash; fall to Phoenix router</li>
+    </ol>
+    <p class="text-gray-600 leading-relaxed mt-4">
+      <strong>Strict paths</strong> mode (default) only serves pages listed in manifest.json,
+      preventing arbitrary file serving. Path traversal attacks are rejected.
+    </p>
+  </div>
+
+  <%!-- Feature: Telemetry + Manifest --%>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl border border-gray-200 p-8">
+      <div class="flex items-center space-x-3 mb-4">
+        <span class="text-2xl">&#128200;</span>
+        <h2 class="text-xl font-semibold text-gray-900">Telemetry</h2>
+      </div>
+      <p class="text-sm text-gray-600 leading-relaxed mb-3">
+        Four event families for full observability:
+      </p>
+      <ul class="space-y-1 text-sm text-gray-500 font-mono">
+        <li>[:phoenix_prerender, :generate]</li>
+        <li>[:phoenix_prerender, :render]</li>
+        <li>[:phoenix_prerender, :serve]</li>
+        <li>[:phoenix_prerender, :regenerate]</li>
+      </ul>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-8">
+      <div class="flex items-center space-x-3 mb-4">
+        <span class="text-2xl">&#128203;</span>
+        <h2 class="text-xl font-semibold text-gray-900">Manifest &amp; Sitemap</h2>
+      </div>
+      <p class="text-sm text-gray-600 leading-relaxed mb-3">
+        After generation, two files are written:
+      </p>
+      <ul class="space-y-1 text-sm text-gray-500">
+        <li><strong>manifest.json</strong> &mdash; checksums, sizes, timestamps</li>
+        <li><strong>sitemap.xml</strong> &mdash; standard sitemaps.org format</li>
+      </ul>
+    </div>
+  </div>
+</div>

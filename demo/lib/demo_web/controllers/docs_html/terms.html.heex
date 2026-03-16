@@ -1,2 +1,147 @@
-<h1>Terms of Service</h1>
-<p>This is a prerendered terms page nested under /docs/terms.</p>
+<DemoWeb.Layouts.page_header
+  title="Configuration Reference"
+  subtitle="All configuration options for PhoenixPrerender"
+  mode="prerendered"
+  mode_description="Prerendered under the /docs scope. Generated file: docs/terms/index.html"
+/>
+
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <%!-- Main Config --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Application Configuration</h2>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      All options live under the <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:phoenix_prerender</code> application key:
+    </p>
+    <pre class="code-block text-sm"><code>config :phoenix_prerender,
+  enabled: false,
+  output_path: "priv/static/prerendered",
+  url_style: :dir_index,
+  cache_control: "public, max-age=300",
+  strict_paths: true,
+  concurrency: System.schedulers_online(),
+  isr: false,
+  revalidate: 300,
+  base_url: "https://example.com",
+  pubsub: nil</code></pre>
+  </div>
+
+  <%!-- Options Table --%>
+  <div class="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-gray-50 border-b border-gray-200">
+          <th class="text-left px-6 py-3 font-semibold text-gray-900">Option</th>
+          <th class="text-left px-6 py-3 font-semibold text-gray-900">Default</th>
+          <th class="text-left px-6 py-3 font-semibold text-gray-900">Description</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">enabled</td>
+          <td class="px-6 py-3 text-gray-500">false</td>
+          <td class="px-6 py-3 text-gray-600">Whether the serving plug is active</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">output_path</td>
+          <td class="px-6 py-3 text-gray-500 font-mono text-xs">"priv/static/prerendered"</td>
+          <td class="px-6 py-3 text-gray-600">Directory for generated HTML files</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">url_style</td>
+          <td class="px-6 py-3 text-gray-500">:dir_index</td>
+          <td class="px-6 py-3 text-gray-600">:dir_index (about/index.html) or :file (about.html)</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">cache_control</td>
+          <td class="px-6 py-3 text-gray-500 font-mono text-xs">"public, max-age=300"</td>
+          <td class="px-6 py-3 text-gray-600">Cache-Control header for served pages</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">strict_paths</td>
+          <td class="px-6 py-3 text-gray-500">true</td>
+          <td class="px-6 py-3 text-gray-600">Only serve paths listed in manifest.json</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">concurrency</td>
+          <td class="px-6 py-3 text-gray-500">schedulers_online</td>
+          <td class="px-6 py-3 text-gray-600">Parallel rendering tasks during generation</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">isr</td>
+          <td class="px-6 py-3 text-gray-500">false</td>
+          <td class="px-6 py-3 text-gray-600">Enable incremental static regeneration</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">revalidate</td>
+          <td class="px-6 py-3 text-gray-500">300</td>
+          <td class="px-6 py-3 text-gray-600">Seconds before a page is considered stale</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">base_url</td>
+          <td class="px-6 py-3 text-gray-500 font-mono text-xs">"https://example.com"</td>
+          <td class="px-6 py-3 text-gray-600">Base URL for sitemap.xml generation</td>
+        </tr>
+        <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">pubsub</td>
+          <td class="px-6 py-3 text-gray-500">nil</td>
+          <td class="px-6 py-3 text-gray-600">PubSub server for distributed cache invalidation</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <%!-- URL Styles --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">URL Styles</h2>
+    <div class="overflow-hidden rounded-lg border border-gray-200">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-gray-50 border-b border-gray-200">
+            <th class="text-left px-6 py-3 font-semibold text-gray-900">URL Path</th>
+            <th class="text-left px-6 py-3 font-semibold text-gray-900">:dir_index</th>
+            <th class="text-left px-6 py-3 font-semibold text-gray-900">:file</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <tr>
+            <td class="px-6 py-3 font-mono text-gray-700">/</td>
+            <td class="px-6 py-3 font-mono text-gray-500">index.html</td>
+            <td class="px-6 py-3 font-mono text-gray-500">index.html</td>
+          </tr>
+          <tr>
+            <td class="px-6 py-3 font-mono text-gray-700">/about</td>
+            <td class="px-6 py-3 font-mono text-gray-500">about/index.html</td>
+            <td class="px-6 py-3 font-mono text-gray-500">about.html</td>
+          </tr>
+          <tr>
+            <td class="px-6 py-3 font-mono text-gray-700">/docs/terms</td>
+            <td class="px-6 py-3 font-mono text-gray-500">docs/terms/index.html</td>
+            <td class="px-6 py-3 font-mono text-gray-500">docs/terms.html</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <%!-- ISR Config --%>
+  <div class="bg-amber-50 rounded-xl border border-amber-200 p-8">
+    <h2 class="text-xl font-semibold text-amber-900 mb-4">ISR Configuration</h2>
+    <p class="text-amber-800 text-sm leading-relaxed mb-4">
+      To enable incremental static regeneration, add the PageCache and Regenerator to your supervision tree
+      and pass the endpoint to the plug:
+    </p>
+    <pre class="code-block text-sm"><code># application.ex
+children = [
+  PhoenixPrerender.PageCache,
+  &#123;PhoenixPrerender.Regenerator, endpoint: MyAppWeb.Endpoint&#125;
+]
+
+# endpoint.ex
+plug PhoenixPrerender.Plug, endpoint: MyAppWeb.Endpoint
+
+# config/prod.exs
+config :phoenix_prerender,
+  isr: true,
+  revalidate: 300</code></pre>
+  </div>
+</div>

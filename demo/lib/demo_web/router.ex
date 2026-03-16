@@ -12,11 +12,16 @@ defmodule DemoWeb.Router do
     plug :put_secure_browser_headers
   end
 
-  # Prerendered routes using the macro
+  # Landing page (dynamic - always fresh)
   scope "/", DemoWeb do
     pipe_through :browser
 
     get "/", PageController, :home
+  end
+
+  # Prerendered controller routes
+  scope "/", DemoWeb do
+    pipe_through :browser
 
     prerender do
       get "/about", PageController, :about
@@ -35,17 +40,22 @@ defmodule DemoWeb.Router do
     end
   end
 
-  # LiveView prerendered routes
+  # Prerendered LiveView routes
   scope "/", DemoWeb do
     pipe_through :browser
 
+    # LiveView + prerender: static HTML first, then hydrated
     live "/changelog", ChangelogLive, :index, metadata: %{prerender: true}
+
+    # ISR candidate: prerendered, regenerated when stale
+    live "/status", StatusLive, :index, metadata: %{prerender: true}
   end
 
-  # Dynamic routes (not prerendered)
+  # Dynamic routes (NOT prerendered)
   scope "/", DemoWeb do
     pipe_through :browser
 
     get "/contact", PageController, :contact
+    get "/dashboard", PageController, :dashboard
   end
 end

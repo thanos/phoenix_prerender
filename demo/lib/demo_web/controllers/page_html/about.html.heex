@@ -1,2 +1,95 @@
-<h1>About</h1>
-<p>This is a prerendered page demonstrating static generation from a controller route.</p>
+<DemoWeb.Layouts.page_header
+  title="About PhoenixPrerender"
+  subtitle="Static prerendering and incremental regeneration for Phoenix applications"
+  mode="prerendered"
+  mode_description="This page was generated at build time by mix phoenix.prerender and served as a static HTML file."
+/>
+
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <div class="bg-white rounded-xl border border-gray-200 p-8">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">What is PhoenixPrerender?</h2>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      PhoenixPrerender brings static site generation to Phoenix applications. It renders your
+      marked routes through the full endpoint pipeline at build time, producing static HTML files
+      that can be served directly from disk &mdash; with zero runtime cost per request.
+    </p>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      Unlike traditional SSG tools, PhoenixPrerender runs inside your Phoenix app. Your routes,
+      controllers, LiveViews, layouts, components, and plugs all execute normally. The HTML output
+      is identical to what a browser would receive.
+    </p>
+    <p class="text-gray-600 leading-relaxed">
+      For pages that need to stay fresh, incremental static regeneration (ISR) serves stale content
+      immediately while regenerating in the background. ETS locks prevent duplicate work, and
+      distributed locking via <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">:global.trans</code>
+      coordinates across BEAM nodes.
+    </p>
+  </div>
+
+  <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-3">How This Page Was Built</h3>
+      <ol class="space-y-3 text-sm text-gray-600">
+        <li class="flex items-start space-x-3">
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">1</span>
+          <span>Route marked with <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">prerender do</code> in the router</span>
+        </li>
+        <li class="flex items-start space-x-3">
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">2</span>
+          <span>Generator dispatched GET /about through the full endpoint</span>
+        </li>
+        <li class="flex items-start space-x-3">
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">3</span>
+          <span>HTML written to <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">priv/static/prerendered/about/index.html</code></span>
+        </li>
+        <li class="flex items-start space-x-3">
+          <span class="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold">4</span>
+          <span>Plug intercepted request and served the file with send_file</span>
+        </li>
+      </ol>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-3">Key Benefits</h3>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li class="flex items-start space-x-2">
+          <span class="text-purple-500 mt-0.5">&#10003;</span>
+          <span>Sub-millisecond response time from disk</span>
+        </li>
+        <li class="flex items-start space-x-2">
+          <span class="text-purple-500 mt-0.5">&#10003;</span>
+          <span>SEO-friendly with full HTML and sitemap.xml</span>
+        </li>
+        <li class="flex items-start space-x-2">
+          <span class="text-purple-500 mt-0.5">&#10003;</span>
+          <span>Works with controllers and LiveViews</span>
+        </li>
+        <li class="flex items-start space-x-2">
+          <span class="text-purple-500 mt-0.5">&#10003;</span>
+          <span>Compatible with Phoenix verified routes (~p)</span>
+        </li>
+        <li class="flex items-start space-x-2">
+          <span class="text-purple-500 mt-0.5">&#10003;</span>
+          <span>Manifest with checksums for cache busting</span>
+        </li>
+        <li class="flex items-start space-x-2">
+          <span class="text-purple-500 mt-0.5">&#10003;</span>
+          <span>Telemetry events for full observability</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="mt-8 bg-purple-50 rounded-xl border border-purple-200 p-6">
+    <h3 class="text-lg font-semibold text-purple-900 mb-2">Router Code for This Page</h3>
+    <pre class="code-block text-sm"><code>import PhoenixPrerender
+
+scope "/", DemoWeb do
+  pipe_through :browser
+
+  prerender do
+    get "/about", PageController, :about
+  end
+end</code></pre>
+  </div>
+</div>
