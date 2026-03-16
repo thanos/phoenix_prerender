@@ -62,6 +62,9 @@ defmodule PhoenixPrerender do
         # Base URL for sitemap generation
         base_url: "https://example.com",
 
+        # Only serve paths listed in manifest.json
+        strict_paths: true,
+
         # PubSub server for distributed cache invalidation
         pubsub: nil
 
@@ -314,5 +317,22 @@ defmodule PhoenixPrerender do
   @spec route_private_value() :: term()
   def route_private_value do
     Application.get_env(:phoenix_prerender, :route_private_value, true)
+  end
+
+  @doc """
+  Returns whether strict path checking is enabled.
+
+  When `true` (the default), `PhoenixPrerender.Plug` only serves pages
+  whose paths appear in `manifest.json`. This prevents serving arbitrary
+  files that happen to exist in the output directory.
+
+  ## Examples
+
+      iex> PhoenixPrerender.strict_paths()
+      true
+  """
+  @spec strict_paths() :: boolean()
+  def strict_paths do
+    Application.get_env(:phoenix_prerender, :strict_paths, true)
   end
 end

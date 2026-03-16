@@ -23,12 +23,16 @@ defmodule PhoenixPrerender.PlugTest do
   defp call_plug(conn, opts \\ []) do
     opts =
       Keyword.merge(
-        [output_path: @output_path, enabled: true, url_style: :dir_index],
+        [output_path: @output_path, enabled: true, url_style: :dir_index, strict_paths: false],
         opts
       )
 
     plug_opts = PrerenderPlug.init(opts)
     PrerenderPlug.call(conn, plug_opts)
+  end
+
+  defp write_manifest(entries) do
+    PhoenixPrerender.Manifest.write(entries, @output_path)
   end
 
   describe "serving prerendered pages" do
@@ -248,6 +252,70 @@ defmodule PhoenixPrerender.PlugTest do
         |> call_plug()
 
       # Serves the page, no crash even without endpoint
+      assert conn.halted
+      assert conn.status == 200
+    end
+  end
+
+  describe "strict_paths" do
+    test "serves page when path is in manifest" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z"
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "rejects page when path is not in manifest" do
+      write_prerendered("/secret", "<html>Secret</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z"
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/secret")
+        |> call_plug(strict_paths: true)
+
+      refute conn.halted
+    end
+
+    test "rejects all paths when no manifest exists" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(strict_paths: true)
+
+      refute conn.halted
+    end
+
+    test "serves any file when strict_paths is false" do
+      write_prerendered("/anything", "<html>Anything</html>")
+
+      conn =
+        build_conn(:get, "/anything")
+        |> call_plug(strict_paths: false)
+
       assert conn.halted
       assert conn.status == 200
     end

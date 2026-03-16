@@ -1,0 +1,14 @@
+{
+  "coverage_options": {
+    "minimum_coverage": 70
+  },
+  "skip_files": [
+    "lib/phoenix_prerender_web/components/core_components.ex",
+    "lib/phoenix_prerender_web/components/layouts.ex",
+    "lib/phoenix_prerender_web/endpoint.ex",
+    "lib/phoenix_prerender_web/gettext.ex",
+    "lib/phoenix_prerender_web/telemetry.ex",
+    "lib/phoenix_prerender_web.ex",
+    "test/"
+  ]
+}

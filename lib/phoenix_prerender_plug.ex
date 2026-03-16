@@ -15,6 +15,20 @@ defmodule PhoenixPrerender.Plug do
     2. **Disk** -- check for a prerendered file at the expected path
     3. **Pass-through** -- let the request continue to the Phoenix router
 
+  ## Strict Paths
+
+  When `strict_paths` is enabled (the default), the plug only serves
+  pages whose paths appear in the `manifest.json` file. This prevents
+  serving arbitrary files that happen to exist in the output directory.
+
+  When disabled, any file found at the expected path is served.
+
+      config :phoenix_prerender, strict_paths: true
+
+  The manifest is loaded once during `init/1` and cached in the plug
+  opts. To pick up new pages after regeneration, the plug re-reads
+  the manifest when a path is not found in the cached version.
+
   ## Incremental Static Regeneration (ISR)
 
   When ISR is enabled (`config :phoenix_prerender, isr: true`), the plug
@@ -74,6 +88,7 @@ defmodule PhoenixPrerender.Plug do
         url_style: :dir_index,
         cache_control: "public, max-age=3600",
         endpoint: MyAppWeb.Endpoint,
+        strict_paths: false,
         enabled: true
 
   ## Telemetry
@@ -101,6 +116,8 @@ defmodule PhoenixPrerender.Plug do
       (default: from application config)
     * `:endpoint` -- the Phoenix endpoint module, required for ISR
       regeneration (default: `nil`)
+    * `:strict_paths` -- only serve paths listed in `manifest.json`
+      (default: from application config, defaults to `true`)
   """
   @impl true
   def init(opts) do
@@ -109,7 +126,8 @@ defmodule PhoenixPrerender.Plug do
       url_style: Keyword.get(opts, :url_style),
       cache_control: Keyword.get(opts, :cache_control),
       enabled: Keyword.get(opts, :enabled),
-      endpoint: Keyword.get(opts, :endpoint)
+      endpoint: Keyword.get(opts, :endpoint),
+      strict_paths: Keyword.get(opts, :strict_paths)
     }
   end
 
@@ -135,6 +153,9 @@ defmodule PhoenixPrerender.Plug do
   defp enabled?(%{enabled: nil}), do: PhoenixPrerender.enabled?()
   defp enabled?(%{enabled: value}), do: value
 
+  defp strict_paths?(%{strict_paths: nil}), do: PhoenixPrerender.strict_paths()
+  defp strict_paths?(%{strict_paths: value}), do: value
+
   defp serve_prerendered(conn, opts) do
     path = PhoenixPrerender.Path.normalize(conn.request_path)
 
@@ -151,14 +172,27 @@ defmodule PhoenixPrerender.Plug do
     cache_control = opts.cache_control || PhoenixPrerender.cache_control()
     endpoint = opts.endpoint
 
-    # Try cache first, then disk
-    case try_cache(path) do
-      {:ok, html, metadata} ->
-        maybe_trigger_isr_from_cache(path, metadata, endpoint)
-        send_prerendered_body(conn, html, path, cache_control, :cache)
+    if strict_paths?(opts) and not path_in_manifest?(path, output_path) do
+      conn
+    else
+      # Try cache first, then disk
+      case try_cache(path) do
+        {:ok, html, metadata} ->
+          maybe_trigger_isr_from_cache(path, metadata, endpoint)
+          send_prerendered_body(conn, html, path, cache_control, :cache)
 
-      :miss ->
-        try_disk(conn, path, output_path, url_style, cache_control, endpoint)
+        :miss ->
+          try_disk(conn, path, output_path, url_style, cache_control, endpoint)
+      end
+    end
+  end
+
+  # -- Strict paths (manifest check) ----------------------------------------
+
+  defp path_in_manifest?(path, output_path) do
+    case PhoenixPrerender.Manifest.read(output_path) do
+      {:ok, manifest} -> PhoenixPrerender.Manifest.lookup(manifest, path) != nil
+      {:error, _} -> false
     end
   end
 
