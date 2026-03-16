@@ -10,8 +10,46 @@ env:
   MIX_ENV: test
 
 jobs:
-  library:
-    name: Library - Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-lint-1.18-27-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-lint-1.18-27-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Credo
+        run: mix credo --strict
+
+      - name: Sobelow
+        run: mix sobelow --config
+
+      - name: Generate docs
+        run: mix docs --warnings-as-errors
+
+  compile:
+    name: Compile - Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -26,6 +64,8 @@ jobs:
             otp: "27"
           - elixir: "1.18"
             otp: "27"
+          - elixir: "1.18"
+            otp: "28"
 
     steps:
       - uses: actions/checkout@v4
@@ -48,30 +88,101 @@ jobs:
       - name: Install dependencies
         run: mix deps.get
 
-      - name: Check formatting
-        run: mix format --check-formatted
-
       - name: Compile with warnings as errors
         run: mix compile --warnings-as-errors
 
-      - name: Run Credo
-        run: mix credo --strict
+  test:
+    name: Test - Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    runs-on: ubuntu-latest
 
-      - name: Run Sobelow
-        run: mix sobelow --config
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.15"
+            otp: "26"
+          - elixir: "1.16"
+            otp: "26"
+          - elixir: "1.17"
+            otp: "27"
+          - elixir: "1.18"
+            otp: "27"
+            coverage: true
+          - elixir: "1.18"
+            otp: "28"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      - name: Install dependencies
+        run: mix deps.get
 
       - name: Run tests
+        if: ${{ !matrix.coverage }}
         run: mix test
 
       - name: Run tests with coverage
+        if: ${{ matrix.coverage }}
         run: mix coveralls.json
 
       - name: Upload coverage
-        if: matrix.elixir == '1.18' && matrix.otp == '27'
+        if: ${{ matrix.coverage }}
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: cover/excoveralls.json
+
+  dialyzer:
+    name: Dialyzer
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-dialyzer-1.18-27-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-dialyzer-1.18-27-
+
+      - name: Cache PLT
+        uses: actions/cache@v4
+        with:
+          path: priv/plts
+          key: ${{ runner.os }}-plt-1.18-27-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-plt-1.18-27-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Run Dialyzer
+        run: mix dialyzer
 
   demo:
     name: Demo - Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}

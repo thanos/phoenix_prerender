@@ -7,7 +7,6 @@ defmodule PhoenixPrerender.Application do
   def start(_type, _args) do
     children = [
       PhoenixPrerenderWeb.Telemetry,
-      {DNSCluster, query: Application.get_env(:phoenix_prerender, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: PhoenixPrerender.PubSub},
       PhoenixPrerenderWeb.Endpoint
     ]
