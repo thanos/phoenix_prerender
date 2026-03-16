@@ -13,6 +13,6 @@ defmodule DemoWeb.DocsControllerTest do
 
   test "GET /docs/terms renders terms" do
     conn = get(build_conn(), ~p"/docs/terms")
-    assert html_response(conn, 200) =~ "Terms"
+    assert html_response(conn, 200) =~ "Prerendered under the /docs scope. Generated file:"
   end
 end
