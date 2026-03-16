@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     env:
-      MIX_ENV: prod
+      MIX_ENV: dev
     steps:
       - uses: actions/checkout@v4
 
@@ -41,10 +41,10 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-release-prod-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-release-dev-${{ hashFiles('mix.lock') }}
 
       - name: Install dependencies
-        run: mix deps.get --only prod
+        run: mix deps.get
 
       - name: Compile
         run: mix compile
