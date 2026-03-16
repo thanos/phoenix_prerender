@@ -1,0 +1,9 @@
+[
+  verbose: false,
+  private: false,
+  skip: false,
+  router: "lib/phoenix_prerender_web/router.ex",
+  exit: "low",
+  format: "txt",
+  ignore: ["Config.CSP"]
+]

@@ -3,6 +3,8 @@ defmodule PhoenixPrerender.PathTest do
 
   alias PhoenixPrerender.Path
 
+  doctest PhoenixPrerender.Path
+
   describe "to_file_path/2 with :dir_index" do
     test "maps root to index.html" do
       assert Path.to_file_path("/", :dir_index) == "index.html"

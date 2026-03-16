@@ -3,6 +3,8 @@ defmodule PhoenixPrerender.TelemetryTest do
 
   alias PhoenixPrerender.Telemetry
 
+  doctest PhoenixPrerender.Telemetry
+
   describe "events/0" do
     test "returns list of telemetry event names" do
       events = Telemetry.events()

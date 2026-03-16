@@ -27,21 +27,6 @@ jobs:
           - elixir: "1.18"
             otp: "27"
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: phoenix_prerender_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
 
@@ -69,15 +54,17 @@ jobs:
       - name: Compile with warnings as errors
         run: mix compile --warnings-as-errors
 
+      - name: Run Credo
+        run: mix credo --strict
+
+      - name: Run Sobelow
+        run: mix sobelow --config
+
       - name: Run tests
         run: mix test
-        env:
-          DATABASE_URL: ecto://postgres:postgres@localhost/phoenix_prerender_test
 
       - name: Run tests with coverage
         run: mix coveralls.json
-        env:
-          DATABASE_URL: ecto://postgres:postgres@localhost/phoenix_prerender_test
 
       - name: Upload coverage
         if: matrix.elixir == '1.18' && matrix.otp == '27'
@@ -85,3 +72,46 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: cover/excoveralls.json
+
+  demo:
+    name: Demo - Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.17"
+            otp: "27"
+          - elixir: "1.18"
+            otp: "27"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            demo/deps
+            demo/_build
+          key: ${{ runner.os }}-demo-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('demo/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-demo-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      - name: Install dependencies
+        working-directory: demo
+        run: mix deps.get
+
+      - name: Compile with warnings as errors
+        working-directory: demo
+        run: mix compile --warnings-as-errors
+
+      - name: Run tests
+        working-directory: demo
+        run: mix test

@@ -3,6 +3,8 @@ defmodule PhoenixPrerender.RegeneratorTest do
 
   alias PhoenixPrerender.Regenerator
 
+  doctest PhoenixPrerender.Regenerator
+
   @output_path "test/tmp/regenerator_test"
 
   setup do

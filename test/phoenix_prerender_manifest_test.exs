@@ -3,6 +3,8 @@ defmodule PhoenixPrerender.ManifestTest do
 
   alias PhoenixPrerender.Manifest
 
+  doctest PhoenixPrerender.Manifest
+
   @output_path "test/tmp/manifest_test"
 
   setup do

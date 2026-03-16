@@ -3,6 +3,8 @@ defmodule PhoenixPrerender.ClusterTest do
 
   alias PhoenixPrerender.Cluster
 
+  doctest PhoenixPrerender.Cluster
+
   describe "topic/0" do
     test "returns the PubSub topic" do
       assert is_binary(Cluster.topic())

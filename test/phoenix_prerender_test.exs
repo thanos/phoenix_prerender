@@ -1,6 +1,8 @@
 defmodule PhoenixPrerenderTest do
   use ExUnit.Case, async: true
 
+  doctest PhoenixPrerender
+
   describe "configuration functions" do
     test "output_path/0 returns default" do
       assert PhoenixPrerender.output_path() == "priv/static/prerendered"
