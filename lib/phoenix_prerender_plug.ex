@@ -1,32 +1,85 @@
 defmodule PhoenixPrerender.Plug do
   @moduledoc """
-  Serves prerendered static HTML files when available.
+  Plug that serves prerendered static HTML files when available.
 
-  When a request matches a prerendered page, the plug serves the
-  static file directly with appropriate headers. Otherwise, the
-  request passes through to the Phoenix application.
+  When a request matches a prerendered page on disk, this plug serves
+  the file directly with appropriate HTTP headers and halts the
+  connection. Otherwise, the request passes through to the rest of the
+  Phoenix pipeline (router, controllers, LiveViews).
 
-  ## Usage
+  ## Setup
 
-  Add to your endpoint before the router:
+  Add the plug to your endpoint module, before the router:
 
-      plug PhoenixPrerender.Plug
+      defmodule MyAppWeb.Endpoint do
+        use Phoenix.Endpoint, otp_app: :my_app
 
-  Or with options:
+        plug Plug.Static, ...
+
+        # Serve prerendered pages
+        plug PhoenixPrerender.Plug
+
+        plug MyAppWeb.Router
+      end
+
+  Then enable it in your production config:
+
+      # config/prod.exs
+      config :phoenix_prerender, enabled: true
+
+  ## How It Works
+
+  For each incoming request, the plug:
+
+    1. Checks if prerendering is enabled (skips if disabled)
+    2. Normalizes the request path (strips trailing slashes, query strings)
+    3. Validates the path is safe (rejects directory traversal)
+    4. Computes the expected file path using the configured URL style
+    5. If the file exists on disk, serves it with `send_file/5` and halts
+    6. If not, passes the connection through unchanged
+
+  ## Response Headers
+
+  When serving a prerendered page, the plug sets:
+
+    * `content-type: text/html`
+    * `cache-control:` value from configuration (default: `"public, max-age=300"`)
+    * `x-prerendered: true` (useful for debugging and monitoring)
+
+  ## Inline Options
+
+  Options can be passed directly to the plug to override global config:
 
       plug PhoenixPrerender.Plug,
         output_path: "priv/static/prerendered",
         url_style: :dir_index,
-        cache_control: "public, max-age=300"
+        cache_control: "public, max-age=3600",
+        enabled: true
 
-  ## Configuration
+  ## Telemetry
 
-  The plug respects the global `:enabled` configuration. When disabled,
-  all requests pass through without checking for prerendered files.
+  Emits `[:phoenix_prerender, :serve]` when a page is served with:
+
+    * Measurements: `%{duration: native_time}`
+    * Metadata: `%{path: String.t(), source: :disk}`
   """
 
   @behaviour Plug
 
+  @doc """
+  Initializes the plug with the given options.
+
+  ## Options
+
+    * `:output_path` -- directory containing prerendered files
+      (default: from application config)
+    * `:url_style` -- `:dir_index` or `:file`
+      (default: from application config)
+    * `:cache_control` -- `Cache-Control` header value
+      (default: from application config)
+    * `:enabled` -- whether the plug is active
+      (default: from application config)
+  """
   @impl true
   def init(opts) do
     %{
@@ -37,6 +90,13 @@ defmodule PhoenixPrerender.Plug do
     }
   end
 
+  @doc """
+  Serves a prerendered file if one exists for the request path.
+
+  When the plug is disabled or no matching file exists, the connection
+  is returned unchanged. When a file is served, the connection is
+  halted after sending.
+  """
   @impl true
   def call(conn, opts) do
     if enabled?(opts) do

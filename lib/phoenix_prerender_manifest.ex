@@ -1,16 +1,72 @@
 defmodule PhoenixPrerender.Manifest do
   @moduledoc """
-  Manages the manifest file and sitemap for prerendered pages.
+  Manages the manifest and sitemap files for prerendered pages.
 
-  The manifest tracks all generated pages with their metadata,
-  including route, output file, generation time, and checksum.
+  After generation, two files are written to the output directory:
+
+    * `manifest.json` -- A JSON file listing every generated page with
+      its route, output file path, file size, SHA-256 checksum, and
+      generation timestamp.
+
+    * `sitemap.xml` -- A standard XML sitemap listing all prerendered
+      URLs, suitable for submission to search engines.
+
+  ## Manifest Format
+
+  The manifest file has this structure:
+
+      {
+        "generated_at": "2024-01-15T10:30:00Z",
+        "pages": [
+          {
+            "route": "/about",
+            "file": "priv/static/prerendered/about/index.html",
+            "size": 4521,
+            "checksum": "a1b2c3d4...",
+            "generated_at": "2024-01-15T10:30:00Z"
+          }
+        ]
+      }
+
+  ## Sitemap Format
+
+  The sitemap follows the standard sitemaps.org protocol:
+
+      <?xml version="1.0" encoding="UTF-8"?>
+      <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+        <url>
+          <loc>https://example.com/about</loc>
+          <lastmod>2024-01-15T10:30:00Z</lastmod>
+        </url>
+      </urlset>
   """
 
   @manifest_filename "manifest.json"
   @sitemap_filename "sitemap.xml"
 
   @doc """
-  Writes a manifest.json file containing metadata for all generated pages.
+  Writes a `manifest.json` file to the output directory.
+
+  The manifest contains metadata for every successfully generated page.
+  Each entry includes the route path, output file, file size, content
+  checksum, and generation timestamp.
+
+  The file is written atomically via `PhoenixPrerender.Generator.write_atomic!/2`.
+
+  ## Parameters
+
+    * `entries` -- list of successful generation result maps (with
+      `:path`, `:file`, `:size`, `:checksum`, `:generated_at` keys)
+    * `output_path` -- the output directory
+
+  ## Examples
+
+      entries = [
+        %{path: "/about", file: "out/about/index.html", size: 1024,
+          checksum: "abc123", generated_at: "2024-01-15T10:30:00Z"}
+      ]
+      PhoenixPrerender.Manifest.write(entries, "out")
+      # Writes out/manifest.json
   """
   @spec write([map()], String.t()) :: :ok
   def write(entries, output_path) do
@@ -34,9 +90,19 @@ defmodule PhoenixPrerender.Manifest do
   end
 
   @doc """
-  Reads and parses the manifest file from the output path.
+  Reads and parses the manifest file from the given output directory.
 
-  Returns `{:ok, manifest}` or `{:error, reason}`.
+  Returns `{:ok, manifest}` on success where `manifest` is a decoded
+  JSON map with string keys, or `{:error, reason}` if the file does
+  not exist or cannot be parsed.
+
+  ## Examples
+
+      {:ok, manifest} = PhoenixPrerender.Manifest.read("priv/static/prerendered")
+      manifest["pages"]
+      #=> [%{"route" => "/about", "checksum" => "abc123", ...}]
+
+      {:error, :enoent} = PhoenixPrerender.Manifest.read("/nonexistent")
   """
   @spec read(String.t()) :: {:ok, map()} | {:error, term()}
   def read(output_path) do
@@ -49,11 +115,28 @@ defmodule PhoenixPrerender.Manifest do
   end
 
   @doc """
-  Writes a sitemap.xml file listing all prerendered routes.
+  Writes a `sitemap.xml` file to the output directory.
+
+  Generates a standard XML sitemap with `<loc>` and `<lastmod>` entries
+  for each prerendered page. The base URL is prepended to each route
+  path to form absolute URLs.
 
   ## Options
 
-    * `:base_url` - the base URL for sitemap entries (default: "https://example.com")
+    * `:base_url` -- the base URL for sitemap entries
+      (default: configured `:base_url` or `"https://example.com"`)
+
+  ## Examples
+
+      entries = [
+        %{path: "/about", generated_at: "2024-01-15T10:30:00Z"},
+        %{path: "/docs", generated_at: "2024-01-15T10:30:00Z"}
+      ]
+
+      PhoenixPrerender.Manifest.write_sitemap(entries, "out",
+        base_url: "https://mysite.com"
+      )
+      # Writes out/sitemap.xml with https://mysite.com/about, etc.
   """
   @spec write_sitemap([map()], String.t(), keyword()) :: :ok
   def write_sitemap(entries, output_path, opts \\ []) do
@@ -100,12 +183,36 @@ defmodule PhoenixPrerender.Manifest do
 
   @doc """
   Returns the manifest filename.
+
+  ## Examples
+
+      iex> PhoenixPrerender.Manifest.manifest_filename()
+      "manifest.json"
   """
   @spec manifest_filename() :: String.t()
   def manifest_filename, do: @manifest_filename
 
   @doc """
-  Looks up a page entry in the manifest by route path.
+  Looks up a page entry in a parsed manifest by its route path.
+
+  Takes a manifest map (as returned by `read/1`) and a route path
+  string. Returns the matching page map or `nil`.
+
+  ## Examples
+
+      manifest = %{"pages" => [
+        %{"route" => "/about", "checksum" => "abc"},
+        %{"route" => "/docs", "checksum" => "def"}
+      ]}
+
+      PhoenixPrerender.Manifest.lookup(manifest, "/about")
+      #=> %{"route" => "/about", "checksum" => "abc"}
+
+      PhoenixPrerender.Manifest.lookup(manifest, "/missing")
+      #=> nil
+
+      PhoenixPrerender.Manifest.lookup(%{}, "/about")
+      #=> nil
   """
   @spec lookup(map(), String.t()) :: map() | nil
   def lookup(%{"pages" => pages}, path) do

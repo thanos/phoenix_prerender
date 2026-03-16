@@ -2,18 +2,54 @@ defmodule PhoenixPrerender.PageCache do
   @moduledoc """
   Optional ETS-based in-memory cache for prerendered pages.
 
-  Provides fast serving from memory before falling back to disk.
-  Used by the ISR system to serve stale content while regenerating.
+  The page cache stores rendered HTML in ETS for fast in-memory serving,
+  avoiding disk reads on every request. It is designed for use with
+  incremental static regeneration (ISR), where stale content is served
+  immediately from cache while a background task regenerates the page.
 
-  ## Usage
+  ## Serving Order
 
-  Start the cache in your application supervision tree:
+  When both the cache and `PhoenixPrerender.Plug` are active, the
+  serving priority is:
 
+    1. **Memory** -- check the ETS cache for the requested path
+    2. **Disk** -- check for a prerendered file on disk
+    3. **Phoenix** -- fall through to the live Phoenix application
+
+  ## Setup
+
+  Add the cache to your application supervision tree:
+
+      # lib/my_app/application.ex
       children = [
-        PhoenixPrerender.PageCache
+        # ... other children
+        PhoenixPrerender.PageCache,
+        PhoenixPrerender.Regenerator
       ]
 
-  The serving order is: memory -> disk -> Phoenix fallback.
+  ## Staleness
+
+  Each cache entry records a `cached_at` timestamp (monotonic time).
+  The `stale?/2` function compares this against the configured
+  revalidation interval to determine whether a page should be
+  regenerated.
+
+  ## Concurrency
+
+  The ETS table is created with `read_concurrency: true` and `:public`
+  access, so any process can read from or write to the cache without
+  going through the GenServer. This is important for the serving plug,
+  which needs to read cached pages without bottlenecking on a single
+  process.
+
+  ## Cache Entries
+
+  Each entry is stored as a 3-tuple: `{path, html, metadata}` where:
+
+    * `path` -- the URL path (e.g., `"/about"`)
+    * `html` -- the rendered HTML string
+    * `metadata` -- a map with at least `:cached_at` (monotonic time),
+      plus any additional metadata passed to `put/3`
   """
 
   use GenServer
@@ -21,7 +57,18 @@ defmodule PhoenixPrerender.PageCache do
   @table :phoenix_prerender_page_cache
 
   @doc """
-  Starts the page cache process.
+  Starts the page cache GenServer and creates the backing ETS table.
+
+  ## Options
+
+    * `:name` -- the process name (default: `PhoenixPrerender.PageCache`)
+
+  ## Examples
+
+      {:ok, pid} = PhoenixPrerender.PageCache.start_link()
+
+      # With a custom name
+      {:ok, pid} = PhoenixPrerender.PageCache.start_link(name: :my_cache)
   """
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
@@ -29,7 +76,15 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @doc """
-  Returns the child spec for supervision tree.
+  Returns the child spec for embedding in a supervision tree.
+
+  ## Examples
+
+      children = [
+        PhoenixPrerender.PageCache
+      ]
+
+      Supervisor.start_link(children, strategy: :one_for_one)
   """
   def child_spec(opts) do
     %{
@@ -46,9 +101,26 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @doc """
-  Gets a cached page by path.
+  Looks up a cached page by its URL path.
 
-  Returns `{:ok, html, metadata}` if found, `:miss` otherwise.
+  Returns `{:ok, html, metadata}` if the page is in cache, or `:miss`
+  if no entry exists for the given path. Also returns `:miss` if the
+  ETS table does not exist (e.g., cache is not started).
+
+  ## Parameters
+
+    * `path` -- the URL path to look up (e.g., `"/about"`)
+
+  ## Examples
+
+      # Cache hit
+      PhoenixPrerender.PageCache.put("/about", "<html>About</html>")
+      {:ok, html, metadata} = PhoenixPrerender.PageCache.get("/about")
+      html
+      #=> "<html>About</html>"
+
+      # Cache miss
+      :miss = PhoenixPrerender.PageCache.get("/nonexistent")
   """
   @spec get(String.t()) :: {:ok, String.t(), map()} | :miss
   def get(path) do
@@ -61,7 +133,27 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @doc """
-  Puts a page into the cache.
+  Stores a page in the cache.
+
+  Automatically adds a `:cached_at` key to the metadata map with the
+  current monotonic time. If the path already exists in the cache, it
+  is overwritten.
+
+  ## Parameters
+
+    * `path` -- the URL path (e.g., `"/about"`)
+    * `html` -- the rendered HTML string
+    * `metadata` -- optional metadata map (default: `%{}`)
+
+  ## Examples
+
+      PhoenixPrerender.PageCache.put("/about", "<html>About</html>")
+
+      # With extra metadata
+      PhoenixPrerender.PageCache.put("/about", "<html>About</html>", %{
+        file: "priv/static/prerendered/about/index.html",
+        regenerated_at: "2024-01-15T10:30:00Z"
+      })
   """
   @spec put(String.t(), String.t(), map()) :: true
   def put(path, html, metadata \\ %{}) do
@@ -71,6 +163,19 @@ defmodule PhoenixPrerender.PageCache do
 
   @doc """
   Removes a page from the cache.
+
+  Returns `true` whether or not the path existed. Safe to call even if
+  the ETS table does not exist.
+
+  ## Parameters
+
+    * `path` -- the URL path to remove
+
+  ## Examples
+
+      PhoenixPrerender.PageCache.put("/about", "<html>About</html>")
+      PhoenixPrerender.PageCache.delete("/about")
+      :miss = PhoenixPrerender.PageCache.get("/about")
   """
   @spec delete(String.t()) :: true
   def delete(path) do
@@ -80,7 +185,17 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @doc """
-  Clears all cached pages.
+  Removes all entries from the cache.
+
+  Returns `true` whether or not the table exists. Useful for bulk
+  invalidation or during deployments.
+
+  ## Examples
+
+      PhoenixPrerender.PageCache.put("/about", "<html>About</html>")
+      PhoenixPrerender.PageCache.put("/docs", "<html>Docs</html>")
+      PhoenixPrerender.PageCache.clear()
+      0 = PhoenixPrerender.PageCache.size()
   """
   @spec clear() :: true
   def clear do
@@ -90,9 +205,30 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @doc """
-  Checks if a cached page is stale based on the revalidation interval.
+  Checks if a cached page is stale and due for regeneration.
 
-  Returns `true` if the page was cached more than `revalidate` seconds ago.
+  Compares the entry's `cached_at` monotonic timestamp against the
+  given revalidation interval. Returns `true` if:
+
+    * The page was cached more than `revalidate_seconds` ago
+    * The page is not in the cache
+    * The ETS table does not exist
+
+  ## Parameters
+
+    * `path` -- the URL path to check
+    * `revalidate_seconds` -- the maximum age in seconds before
+      a page is considered stale
+
+  ## Examples
+
+      PhoenixPrerender.PageCache.put("/about", "<html>About</html>")
+
+      # Freshly cached -- not stale
+      false = PhoenixPrerender.PageCache.stale?("/about", 300)
+
+      # Not in cache -- always stale
+      true = PhoenixPrerender.PageCache.stale?("/missing", 300)
   """
   @spec stale?(String.t(), pos_integer()) :: boolean()
   def stale?(path, revalidate_seconds) do
@@ -110,7 +246,15 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @doc """
-  Returns the number of cached pages.
+  Returns the number of pages currently in the cache.
+
+  Returns `0` if the ETS table does not exist.
+
+  ## Examples
+
+      PhoenixPrerender.PageCache.put("/about", "<html>About</html>")
+      PhoenixPrerender.PageCache.put("/docs", "<html>Docs</html>")
+      2 = PhoenixPrerender.PageCache.size()
   """
   @spec size() :: non_neg_integer()
   def size do
