@@ -122,7 +122,7 @@ defmodule PhoenixPrerender.MixProject do
 
   defp docs do
     [
-      main: "PhoenixPrerender",
+      main: "readme",
       source_ref: "v#{@version}",
       source_url: @source_url,
       extras: ["README.md", "CHANGELOG.md", "LICENSE"],

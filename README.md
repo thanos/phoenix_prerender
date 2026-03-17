@@ -4,6 +4,28 @@ Static prerendering and incremental static regeneration (ISR) for Phoenix applic
 
 Generate static HTML from your Phoenix routes at build time, serve them instantly from disk in production, and keep them fresh with background regeneration — similar to Next.js ISR or SvelteKit prerendering, but built for the BEAM.
 
+## Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Guide](#guide)
+  - [How Generation Works](#how-generation-works)
+  - [URL Styles](#url-styles)
+  - [The Serving Plug](#the-serving-plug)
+  - [Incremental Static Regeneration (ISR)](#incremental-static-regeneration-isr)
+  - [Distributed Regeneration](#distributed-regeneration)
+  - [Page Cache](#page-cache)
+  - [Mix Task](#mix-task)
+  - [Telemetry](#telemetry)
+  - [Manifest & Sitemap](#manifest--sitemap)
+  - [CI Integration](#ci-integration)
+  - [LiveView Compatibility](#liveview-compatibility)
+- [Performance](#performance)
+- [Module Reference](#module-reference)
+- [Roadmap](#roadmap)
+- [License](#license)
+
 ## Features
 
 - **Build-time static generation** — render marked routes through the full Phoenix endpoint pipeline and write HTML to disk
@@ -464,6 +486,46 @@ cd demo && mix run bench/plug_serving_bench.exs
 | `PhoenixPrerender.Cluster` | Distributed regeneration via `:global` and PubSub |
 | `PhoenixPrerender.Telemetry` | Telemetry event definitions and default logger |
 | `Mix.Tasks.Phoenix.Prerender` | Mix task for CLI generation |
+
+## Roadmap
+
+### v0.2.0 — Optimizations & Developer Experience
+
+- **Static asset path helper** — a `static_asset_path/2` function for resolving digested asset paths inside prerendered templates
+- **Gzip & Brotli pre-compression** — generate `.gz` and `.br` files alongside HTML for zero-overhead compressed serving
+- **Cache prewarm on boot** — automatically load prerendered pages from disk into ETS on application start
+
+### v0.3.0 — Distributed Consistency & Cache Control
+
+- **PubSub invalidation** — integrate Phoenix.PubSub for cluster-wide cache purging (e.g., `PhoenixPrerender.purge("/blog/post-1")` clears ETS on all nodes)
+- **Tag-based purging** — support metadata tags on routes (e.g., `tags: [:author_1, :sidebar]`) to allow bulk invalidation of related content
+- **Header preservation** — store and serve original `content-security-policy`, `cache-control`, and `x-frame-options` headers from the prerendered manifest
+
+### v0.4.0 — Enhanced Hybrid DX
+
+- **Dev-mode proxy** — a Plug that simulates prerendering in development without writing to disk, providing headers and latency logs in the console
+- **LiveView Dashboard integration** — a custom card for `Phoenix.LiveDashboard` to monitor cache hits, misses, and manual purge controls
+- **Selective hydration support** — attributes to mark specific DOM elements to be excluded from prerendering (e.g., `data-prerender-ignore`) to prevent flickering of user-specific data
+
+### v0.5.0 — Performance & Edge Optimization
+
+- **Pre-compressed assets** — store `.gz` and `.br` (Brotli) versions of HTML in ETS/storage to enable zero-copy serving via Plug
+- **Image optimization pipeline** — a built-in task to scan prerendered HTML and generate optimized `srcset` images for local assets
+- **SWR background workers** — Broadway or GenStage integration to stagger background regenerations during high-traffic spikes
+
+### v0.6.0 — Persistence & Distribution
+
+- **External cache adapters** — a behaviour-based adapter system moving beyond local ETS:
+  - Nebulex/Cachex for distributed, multi-level caching (L1/L2) across nodes
+  - Redis for persistence across application restarts
+- **Storage providers** — a `PhoenixPrerender.Store` behaviour for uploading prerendered HTML and assets to S3, GCS, or Azure
+- **CDN invalidation** — hooks to trigger `PURGE` requests to Cloudflare or Fastly after regeneration
+
+### v0.7.0 — Workflow Automation & Orchestration
+
+- **Scheduled prerendering (Quantum)** — first-class support for Quantum cron expressions to trigger full or partial site warm-ups (e.g., prerender the "Daily News" section every morning at 6:00 AM)
+- **Resilient image pipeline (Oban)** — use Oban for background image processing (WebP/AVIF generation) with retries, rate-limiting, and observability
+- **Extended telemetry** — emit `[:phoenix_prerender, :render, :stop]` events to allow developers to track prerendering duration and identify bottlenecks
 
 ## License
 
