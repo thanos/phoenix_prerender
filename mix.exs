@@ -175,6 +175,7 @@ defmodule PhoenixPrerender.MixProject do
       {"compile --warnings-as-errors", :dev},
       {"format --check-formatted", :dev},
       {"credo --strict", :dev},
+      {"sobelow --config", :dev},
       # {"dialyzer", :dev},
       {"test --cover", :test},
       {"docs --warnings-as-errors", :dev}

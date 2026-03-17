@@ -140,6 +140,7 @@ defmodule PhoenixPrerender.PageCache do
     end
   end
 
+  # sobelow_skip ["Traversal.FileModule"]
   defp prewarm_page(page, count) do
     route = page["route"]
     file = page["file"]
