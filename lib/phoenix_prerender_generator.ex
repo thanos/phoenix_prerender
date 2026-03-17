@@ -284,9 +284,20 @@ defmodule PhoenixPrerender.Generator do
   # sobelow_skip ["Traversal.FileModule"]
   def write_compressed_variants!(file_path, content) do
     PhoenixPrerender.Compressor.compress_all(content)
-    |> Enum.map(fn {ext, compressed} ->
-      write_atomic!(file_path <> ext, compressed)
-      %{extension: ext, size: byte_size(compressed)}
+    |> Enum.flat_map(fn {ext, compressed} ->
+      if safe_extension?(ext) do
+        write_atomic!(file_path <> ext, compressed)
+        [%{extension: ext, size: byte_size(compressed)}]
+      else
+        Logger.warning("PhoenixPrerender: Rejecting unsafe compressor extension: #{inspect(ext)}")
+        []
+      end
     end)
+  end
+
+  @safe_extension_pattern ~r/^\.[A-Za-z0-9]+$/
+
+  defp safe_extension?(ext) do
+    is_binary(ext) and Regex.match?(@safe_extension_pattern, ext)
   end
 end

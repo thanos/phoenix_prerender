@@ -194,6 +194,21 @@ defmodule PhoenixPrerender.GeneratorTest do
 
       assert [] = Generator.write_compressed_variants!(path, "<html>test</html>")
     end
+
+    test "rejects compressor extensions containing path traversal" do
+      defmodule TraversalCompressor do
+        @behaviour PhoenixPrerender.Compressor
+        def compress(content), do: {:ok, content}
+        def extension, do: "/../evil"
+      end
+
+      Application.put_env(:phoenix_prerender, :compressors, [TraversalCompressor])
+      path = Path.join(@output_path, "test/safe.html")
+      Generator.write_atomic!(path, "<html>test</html>")
+
+      assert [] = Generator.write_compressed_variants!(path, "<html>test</html>")
+      refute File.exists?(path <> "/../evil")
+    end
   end
 
   describe "write_atomic!/2" do
