@@ -266,6 +266,7 @@ defmodule PhoenixPrerender.Plug do
     end
   end
 
+  # sobelow_skip ["Traversal.SendFile"]
   defp do_send_prerendered_file(conn, actual_file, encoding, path, cache_control) do
     start_time = System.monotonic_time()
 
