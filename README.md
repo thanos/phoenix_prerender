@@ -158,6 +158,12 @@ config :phoenix_prerender,
   pubsub: nil
 ```
 
+> **Note:** The `output_path` and `url_style` settings are shared between the
+> mix task (which writes files) and the plug (which serves them). If you
+> override either via CLI flags (`--output`, `--style`) without updating the
+> config or plug options to match, the plug won't find the generated files.
+> The safest approach is to set these values once in application config.
+
 ## Guide
 
 ### How Generation Works
@@ -293,27 +299,38 @@ The cache supports:
 
 ### Mix Task
 
-The `mix phoenix.prerender` task provides CLI access to generation:
+The `mix phoenix.prerender` (or `mix phx.prerender`) task provides CLI access to generation:
 
 ```bash
 # Generate all prerender-marked routes
-mix phoenix.prerender
+mix phx.prerender
 
-# Specify router and endpoint
-mix phoenix.prerender --router MyAppWeb.Router --endpoint MyAppWeb.Endpoint
+# Specify router and endpoint explicitly
+mix phx.prerender --router MyAppWeb.Router --endpoint MyAppWeb.Endpoint
 
-# Generate specific pages only
-mix phoenix.prerender --path /about --path /docs/terms
+# Regenerate only specific pages (can be repeated)
+mix phx.prerender --path /about --path /docs/terms
 
-# Use file-style URLs
-mix phoenix.prerender --style file
+# Use file-style URLs (about.html instead of about/index.html)
+mix phx.prerender --style file
 
 # Custom output directory
-mix phoenix.prerender --output _build/prerendered
+mix phx.prerender --output _build/prerendered
 
-# Limit concurrency
-mix phoenix.prerender --concurrency 2
+# Limit concurrency (useful on memory-constrained CI runners)
+mix phx.prerender --concurrency 2
 ```
+
+> **Important:** The `--output` and `--style` flags only affect where and how
+> the task writes files. The serving plug must be configured to match,
+> otherwise it will look in the wrong location or for the wrong filenames.
+> Set these via application config so both the task and plug stay in sync:
+>
+> ```elixir
+> config :phoenix_prerender,
+>   output_path: "_build/prerendered",
+>   url_style: :file
+> ```
 
 ### Telemetry
 

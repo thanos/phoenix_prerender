@@ -20,35 +20,92 @@ defmodule Mix.Tasks.Phoenix.Prerender do
 
   ## Options
 
-    * `--router` -- the router module name (default: inferred from app name)
-    * `--endpoint` -- the endpoint module name (default: inferred from app name)
-    * `--output` -- output directory for generated files
-      (default: from config or `"priv/static/prerendered"`)
-    * `--style` -- URL style: `"dir_index"` or `"file"`
-      (default: from config or `"dir_index"`)
-    * `--path` -- render only specific path(s); can be repeated
-    * `--concurrency` -- number of concurrent rendering tasks
-      (default: from config or `System.schedulers_online/0`)
+    * `--router` -- the Phoenix router module that contains your routes.
+      Defaults to `<AppName>Web.Router` (e.g., for app `:my_store`, it
+      resolves to `MyStoreWeb.Router`). Use this when your router module
+      doesn't follow the standard naming convention.
+
+          $ mix phoenix.prerender --router MyStoreWeb.AdminRouter
+
+    * `--endpoint` -- the Phoenix endpoint module used to render pages.
+      Defaults to `<AppName>Web.Endpoint`. Needed when you have multiple
+      endpoints or a non-standard module name.
+
+          $ mix phoenix.prerender --endpoint MyStoreWeb.Endpoint
+
+    * `--output` -- the directory where generated HTML files are written.
+      Defaults to `"priv/static/prerendered"`. Useful when deploying to
+      a CDN origin directory or a separate build artifact path.
+
+          $ mix phoenix.prerender --output _build/static
+
+      **Important:** `PhoenixPrerender.Plug` must be configured to read
+      from the same directory, otherwise it won't find the generated files.
+      Either set the output path via application config (which both the
+      task and plug read automatically):
+
+          config :phoenix_prerender, output_path: "_build/static"
+
+      Or pass it explicitly to the plug:
+
+          plug PhoenixPrerender.Plug, output_path: "_build/static"
+
+    * `--style` -- controls how URL paths map to files on disk. Two options:
+
+        * `"dir_index"` (default) -- each page gets its own directory with
+          an `index.html` file. This produces clean URLs without file
+          extensions when served by most web servers and CDNs.
+
+              /about     → about/index.html
+              /docs/faq  → docs/faq/index.html
+
+        * `"file"` -- each page is written as a single `.html` file.
+          Useful when deploying to S3, GitHub Pages, or other hosts that
+          don't automatically serve `index.html` from directories.
+
+              /about     → about.html
+              /docs/faq  → docs/faq.html
+
+          Example:
+
+              $ mix phoenix.prerender --style file
+
+      **Important:** The plug must use the same style to find the files.
+      Set it via application config (recommended):
+
+          config :phoenix_prerender, url_style: :file
+
+      Or pass it to the plug directly:
+
+          plug PhoenixPrerender.Plug, url_style: :file
+
+    * `--path` -- render only specific paths instead of all prerender-marked
+      routes. Can be repeated. Useful for regenerating a single page after
+      a content change without rebuilding the entire site.
+
+          $ mix phoenix.prerender --path /about
+          $ mix phoenix.prerender --path /pricing --path /docs/terms
+
+    * `--concurrency` -- the number of pages to render in parallel. Defaults
+      to `System.schedulers_online/0` (the number of CPU cores). Lower this
+      on memory-constrained CI runners or when rendering pages that make
+      external API calls.
+
+          $ mix phoenix.prerender --concurrency 2
 
   ## Examples
 
-      # Generate all prerender-marked routes
+      # Generate all prerender-marked routes with default settings
       $ mix phoenix.prerender
 
-      # Specify router and endpoint explicitly
-      $ mix phoenix.prerender --router MyAppWeb.Router --endpoint MyAppWeb.Endpoint
+      # Regenerate just the pricing page after updating copy
+      $ mix phoenix.prerender --path /pricing
 
-      # Generate only specific pages
-      $ mix phoenix.prerender --path /about --path /docs/terms
+      # Generate flat .html files for S3 deployment
+      $ mix phoenix.prerender --style file --output _build/s3
 
-      # Use file-style URL mapping (about.html instead of about/index.html)
-      $ mix phoenix.prerender --style file
-
-      # Limit concurrency to 2 tasks
-      $ mix phoenix.prerender --concurrency 2
-
-      # Generate to a custom directory
-      $ mix phoenix.prerender --output _build/prerendered
+      # CI pipeline: low concurrency, explicit modules
+      $ mix phoenix.prerender --router MyStoreWeb.Router --endpoint MyStoreWeb.Endpoint --concurrency 2
 
   ## Output
 

@@ -91,6 +91,13 @@ defmodule PhoenixPrerender.Plug do
         strict_paths: false,
         enabled: true
 
+  > **Important:** The `output_path` and `url_style` must match what was
+  > used when generating files with `mix phx.prerender`. If the task wrote
+  > files with `--style file` but the plug defaults to `:dir_index`, it
+  > will look for `about/index.html` when the file is actually `about.html`.
+  > The safest approach is to set both values in application config so the
+  > task and plug stay in sync automatically.
+
   ## Telemetry
 
   Emits `[:phoenix_prerender, :serve]` when a page is served with:
