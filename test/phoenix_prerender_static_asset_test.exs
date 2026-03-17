@@ -14,19 +14,21 @@ defmodule PhoenixPrerender.StaticAssetTest do
     end
 
     test "returns the original path when endpoint function is undefined" do
-      defmodule NoStaticEndpoint do
+      defmodule __MODULE__.NoStaticEndpoint do
         # No static_path/1 defined
       end
 
-      assert StaticAsset.static_path(NoStaticEndpoint, "/assets/app.css") == "/assets/app.css"
+      assert StaticAsset.static_path(__MODULE__.NoStaticEndpoint, "/assets/app.css") ==
+               "/assets/app.css"
     end
 
     test "returns the original path when endpoint raises ArgumentError" do
-      defmodule BadEndpoint do
+      defmodule __MODULE__.BadEndpoint do
         def static_path(_path), do: raise(ArgumentError, "no manifest")
       end
 
-      assert StaticAsset.static_path(BadEndpoint, "/assets/app.css") == "/assets/app.css"
+      assert StaticAsset.static_path(__MODULE__.BadEndpoint, "/assets/app.css") ==
+               "/assets/app.css"
     end
   end
 

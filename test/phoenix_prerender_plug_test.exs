@@ -390,6 +390,30 @@ defmodule PhoenixPrerender.PlugTest do
       assert get_resp_header(conn, "content-encoding") == ["gzip"]
     end
 
+    test "preserves existing vary header values" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_resp_header("vary", "cookie")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "vary") == ["cookie, accept-encoding"]
+    end
+
+    test "does not duplicate accept-encoding in vary header" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_resp_header("vary", "Accept-Encoding")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "vary") == ["Accept-Encoding"]
+    end
+
     test "respects q-value ordering" do
       write_prerendered("/about", "<html>About</html>")
       file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
@@ -406,6 +430,45 @@ defmodule PhoenixPrerender.PlugTest do
       assert conn.halted
       # Server preference order wins (br first) since both are accepted (q > 0)
       assert get_resp_header(conn, "content-encoding") == ["br"]
+    end
+
+    test "returns 406 when identity is explicitly rejected and no compressed variant exists" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "identity;q=0")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 406
+    end
+
+    test "returns 406 when wildcard q=0 rejects all encodings" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "*;q=0")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 406
+    end
+
+    test "serves compressed when identity rejected but compressed variant exists" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip, identity;q=0")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == ["gzip"]
     end
   end
 

@@ -90,8 +90,9 @@ defmodule PhoenixPrerender.PageCacheTest do
           paths: ["/about", "/docs"]
         )
 
+      waiter = attach_prewarm_handler()
       start_supervised!({PageCache, prewarm: true, output_path: output_path})
-      await_prewarm()
+      await_prewarm(waiter)
 
       assert {:ok, html, meta} = PageCache.get("/about")
       assert is_binary(html)
@@ -104,8 +105,9 @@ defmodule PhoenixPrerender.PageCacheTest do
     end
 
     test "prewarm does not crash when manifest is missing" do
+      waiter = attach_prewarm_handler()
       start_supervised!({PageCache, prewarm: true, output_path: "test/tmp/nonexistent"})
-      await_prewarm()
+      await_prewarm(waiter)
 
       assert PageCache.size() == 0
     end
@@ -138,8 +140,9 @@ defmodule PhoenixPrerender.PageCacheTest do
 
       File.write!(Path.join(output_path, "manifest.json"), Jason.encode!(manifest))
 
+      waiter = attach_prewarm_handler()
       start_supervised!({PageCache, prewarm: true, output_path: output_path})
-      await_prewarm()
+      await_prewarm(waiter)
 
       assert PageCache.size() == 0
       assert :miss = PageCache.get("/evil")
@@ -163,30 +166,36 @@ defmodule PhoenixPrerender.PageCacheTest do
 
       File.write!(Path.join(output_path, "manifest.json"), Jason.encode!(manifest))
 
+      waiter = attach_prewarm_handler()
       start_supervised!({PageCache, prewarm: true, output_path: output_path})
-      await_prewarm()
+      await_prewarm(waiter)
 
       assert PageCache.size() == 0
 
       File.rm_rf!(output_path)
     end
 
-    # Waits for the [:phoenix_prerender, :prewarm] telemetry event,
-    # which fires at the end of handle_continue(:prewarm, ...).
-    defp await_prewarm(timeout \\ 5_000) do
+    # Attaches a telemetry handler for [:phoenix_prerender, :prewarm] BEFORE
+    # starting PageCache, so the event cannot be missed. Returns a handle
+    # to pass to await_prewarm/1.
+    defp attach_prewarm_handler do
       ref = make_ref()
-      self = self()
+      pid = self()
       handler_id = "test-prewarm-await-#{System.unique_integer()}"
 
       :telemetry.attach(
         handler_id,
         [:phoenix_prerender, :prewarm],
-        fn _event, _measurements, _metadata, {pid, tag} ->
-          send(pid, tag)
+        fn _event, _measurements, _metadata, {target, tag} ->
+          send(target, tag)
         end,
-        {self, ref}
+        {pid, ref}
       )
 
+      {handler_id, ref}
+    end
+
+    defp await_prewarm({handler_id, ref}, timeout \\ 5_000) do
       receive do
         ^ref -> :telemetry.detach(handler_id)
       after

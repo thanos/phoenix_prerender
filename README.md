@@ -524,7 +524,7 @@ When `PhoenixPrerender.Plug` serves a page from disk, it negotiates encoding:
 3. If a compressed file exists, serves it with `content-encoding` and `vary: accept-encoding` headers
 4. If no compressed file exists, serves the uncompressed original
 
-Cache-served responses (from ETS) are sent uncompressed — Cowboy/Bandit handle on-the-fly compression for in-memory responses.
+Cache-served responses (from ETS) are sent as-is without pre-compression headers. If your endpoint or web server (Cowboy/Bandit) is configured for response compression, it will compress these responses on the fly. Otherwise, they are served uncompressed.
 
 Compressors are fault-tolerant: if a compressor fails, it logs a warning and is skipped. The uncompressed file is always written regardless.
 

@@ -131,7 +131,13 @@ defmodule PhoenixPrerender.PageCache do
     case PhoenixPrerender.Manifest.read(output_path) do
       {:ok, manifest} ->
         pages = manifest["pages"] || []
-        safe_prefix = Path.expand(output_path)
+
+        safe_prefix =
+          case resolve_real_path(output_path) do
+            {:ok, real} -> real
+            {:error, _} -> Path.expand(output_path)
+          end
+
         Enum.reduce(pages, 0, fn page, count -> prewarm_page(page, count, safe_prefix) end)
 
       {:error, reason} ->
@@ -143,14 +149,25 @@ defmodule PhoenixPrerender.PageCache do
 
   defp prewarm_page(%{"route" => route, "file" => file}, count, safe_prefix)
        when is_binary(route) and is_binary(file) do
-    expanded = Path.expand(file)
+    case resolve_real_path(file) do
+      {:ok, real_path} ->
+        if String.starts_with?(real_path, safe_prefix <> "/") or real_path == safe_prefix do
+          read_and_cache(route, real_path, count)
+        else
+          require Logger
 
-    if String.starts_with?(expanded, safe_prefix <> "/") or expanded == safe_prefix do
-      read_and_cache(route, file, count)
-    else
-      require Logger
-      Logger.warning("PhoenixPrerender: Prewarm skipped #{route}: path outside output directory")
-      count
+          Logger.warning(
+            "PhoenixPrerender: Prewarm skipped #{route}: path outside output directory"
+          )
+
+          count
+        end
+
+      {:error, _} ->
+        # File doesn't exist — fall back to expanded path check for a useful warning
+        require Logger
+        Logger.warning("PhoenixPrerender: Prewarm skipped #{route}: file not found")
+        count
     end
   end
 
@@ -158,6 +175,43 @@ defmodule PhoenixPrerender.PageCache do
     require Logger
     Logger.warning("PhoenixPrerender: Prewarm skipped malformed entry: #{inspect(page)}")
     count
+  end
+
+  # Resolves a path to its real location on disk, following symlinks.
+  # Uses File.stat/1 (which follows symlinks) to verify the file exists,
+  # then checks via :file.read_link/1 whether it's a symlink and resolves
+  # the target if so.
+  defp resolve_real_path(path) do
+    expanded = Path.expand(path)
+
+    case :file.read_link(String.to_charlist(expanded)) do
+      {:ok, target} ->
+        {:ok, resolve_symlink_target(target, expanded)}
+
+      {:error, :einval} ->
+        resolve_regular_path(expanded)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp resolve_symlink_target(target, expanded) do
+    target_str = List.to_string(target)
+
+    if Path.type(target_str) == :absolute do
+      target_str
+    else
+      Path.join(Path.dirname(expanded), target_str)
+    end
+    |> Path.expand()
+  end
+
+  defp resolve_regular_path(expanded) do
+    case File.stat(expanded) do
+      {:ok, _} -> {:ok, expanded}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   # sobelow_skip ["Traversal.FileModule"]
