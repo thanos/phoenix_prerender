@@ -82,7 +82,6 @@ defmodule PhoenixPrerender.PageCacheTest do
       File.rm_rf!(output_path)
       File.mkdir_p!(output_path)
 
-      # Generate pages to create manifest and files
       {:ok, _results} =
         PhoenixPrerender.Generator.generate(
           router: PhoenixPrerenderWeb.Router,
@@ -91,11 +90,8 @@ defmodule PhoenixPrerender.PageCacheTest do
           paths: ["/about", "/docs"]
         )
 
-      # Start PageCache with prewarm enabled
       start_supervised!({PageCache, prewarm: true, output_path: output_path})
-
-      # Give prewarm a moment to complete via handle_continue
-      Process.sleep(100)
+      await_prewarm()
 
       assert {:ok, html, meta} = PageCache.get("/about")
       assert is_binary(html)
@@ -109,16 +105,16 @@ defmodule PhoenixPrerender.PageCacheTest do
 
     test "prewarm does not crash when manifest is missing" do
       start_supervised!({PageCache, prewarm: true, output_path: "test/tmp/nonexistent"})
-
-      # Give handle_continue a moment
-      Process.sleep(50)
+      await_prewarm()
 
       assert PageCache.size() == 0
     end
 
     test "prewarm is off by default" do
       start_supervised!(PageCache)
-      Process.sleep(50)
+      # No prewarm runs, so cache is immediately empty.
+      # Verify by making a synchronous call to the GenServer — if init
+      # returned without {:continue, :prewarm}, it's ready to respond.
       assert PageCache.size() == 0
     end
 
@@ -127,7 +123,6 @@ defmodule PhoenixPrerender.PageCacheTest do
       File.rm_rf!(output_path)
       File.mkdir_p!(output_path)
 
-      # Write a manifest with a path that escapes the output directory
       manifest = %{
         "generated_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
         "pages" => [
@@ -144,7 +139,7 @@ defmodule PhoenixPrerender.PageCacheTest do
       File.write!(Path.join(output_path, "manifest.json"), Jason.encode!(manifest))
 
       start_supervised!({PageCache, prewarm: true, output_path: output_path})
-      Process.sleep(50)
+      await_prewarm()
 
       assert PageCache.size() == 0
       assert :miss = PageCache.get("/evil")
@@ -169,11 +164,36 @@ defmodule PhoenixPrerender.PageCacheTest do
       File.write!(Path.join(output_path, "manifest.json"), Jason.encode!(manifest))
 
       start_supervised!({PageCache, prewarm: true, output_path: output_path})
-      Process.sleep(50)
+      await_prewarm()
 
       assert PageCache.size() == 0
 
       File.rm_rf!(output_path)
+    end
+
+    # Waits for the [:phoenix_prerender, :prewarm] telemetry event,
+    # which fires at the end of handle_continue(:prewarm, ...).
+    defp await_prewarm(timeout \\ 5_000) do
+      ref = make_ref()
+      self = self()
+      handler_id = "test-prewarm-await-#{System.unique_integer()}"
+
+      :telemetry.attach(
+        handler_id,
+        [:phoenix_prerender, :prewarm],
+        fn _event, _measurements, _metadata, {pid, tag} ->
+          send(pid, tag)
+        end,
+        {self, ref}
+      )
+
+      receive do
+        ^ref -> :telemetry.detach(handler_id)
+      after
+        timeout ->
+          :telemetry.detach(handler_id)
+          raise "Prewarm did not complete within #{timeout}ms"
+      end
     end
   end
 end
