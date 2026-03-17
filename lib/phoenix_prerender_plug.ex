@@ -266,10 +266,12 @@ defmodule PhoenixPrerender.Plug do
       |> Plug.Conn.put_resp_header("x-prerendered", "true")
 
     conn =
+      conn
+      |> Plug.Conn.put_resp_header("vary", "accept-encoding")
+
+    conn =
       if encoding do
-        conn
-        |> Plug.Conn.put_resp_header("content-encoding", encoding)
-        |> Plug.Conn.put_resp_header("vary", "accept-encoding")
+        Plug.Conn.put_resp_header(conn, "content-encoding", encoding)
       else
         conn
       end
@@ -315,6 +317,7 @@ defmodule PhoenixPrerender.Plug do
 
   # -- Encoding negotiation ---------------------------------------------------
 
+  # Preference order: brotli first, then gzip.
   @encoding_candidates [
     {"br", ".br"},
     {"gzip", ".gz"}
@@ -325,25 +328,68 @@ defmodule PhoenixPrerender.Plug do
     accepted = parse_accept_encoding(conn)
 
     Enum.find_value(@encoding_candidates, {file_path, nil}, fn {encoding, ext} ->
-      accepted_and_exists?(encoding, file_path <> ext, accepted)
+      find_compressed_variant(encoding, file_path <> ext, accepted)
     end)
   end
 
-  defp accepted_and_exists?(encoding, compressed_path, accepted) do
-    if encoding in accepted and File.exists?(compressed_path) do
+  defp find_compressed_variant(encoding, compressed_path, accepted) do
+    if encoding_accepted?(encoding, accepted) and File.exists?(compressed_path) do
       {compressed_path, encoding}
     end
   end
 
-  defp parse_accept_encoding(conn) do
+  defp encoding_accepted?(encoding, accepted) do
+    case Map.fetch(accepted, encoding) do
+      {:ok, q} when q > 0 -> true
+      _ -> wildcard_accepted?(encoding, accepted)
+    end
+  end
+
+  defp wildcard_accepted?(encoding, accepted) do
+    case Map.fetch(accepted, "*") do
+      {:ok, q} when q > 0 -> not Map.has_key?(accepted, encoding)
+      _ -> false
+    end
+  end
+
+  @doc false
+  def parse_accept_encoding(conn) do
     conn
     |> Plug.Conn.get_req_header("accept-encoding")
-    |> Enum.flat_map(fn value ->
-      value
-      |> String.split(",")
-      |> Enum.map(fn part ->
-        part |> String.split(";") |> List.first() |> String.trim()
-      end)
+    |> Enum.flat_map(&String.split(&1, ","))
+    |> Enum.reduce(%{}, fn part, acc ->
+      {encoding, q} = parse_encoding_part(part)
+      Map.put(acc, encoding, q)
     end)
+  end
+
+  defp parse_encoding_part(part) do
+    case String.split(part, ";") do
+      [token] ->
+        {token |> String.trim() |> String.downcase(), 1.0}
+
+      [token | params] ->
+        encoding = token |> String.trim() |> String.downcase()
+        q = extract_q_value(params)
+        {encoding, q}
+    end
+  end
+
+  defp extract_q_value(params) do
+    Enum.find_value(params, 1.0, fn param ->
+      param = String.trim(param)
+
+      case String.split(param, "=", parts: 2) do
+        ["q", value] -> parse_q(value)
+        _ -> nil
+      end
+    end)
+  end
+
+  defp parse_q(value) do
+    case Float.parse(String.trim(value)) do
+      {q, _} when q >= 0.0 and q <= 1.0 -> q
+      _ -> 1.0
+    end
   end
 end
