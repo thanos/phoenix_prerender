@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.1.1 (2026-03-17)
+
+- Increased test coverage to 87% (from 74.6%)
+- Added tests for mix tasks, cluster module, and configuration functions
+- Added `mix phx.prerender` alias task
+
 ## v0.1.0 (2026-03-16)
 
 Initial release.

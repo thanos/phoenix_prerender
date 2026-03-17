@@ -49,7 +49,7 @@ Generate static HTML from your Phoenix routes at build time, serve them instantl
 # mix.exs
 defp deps do
   [
-    {:phoenix_prerender, "~> 0.1.0"}
+    {:phoenix_prerender, "~> 0.1.1"}
   ]
 end
 ```
