@@ -130,9 +130,8 @@ defmodule PhoenixPrerender.GeneratorTest do
 
       [result] = Enum.filter(results, &(&1.status == :ok))
 
-      assert result.compressed == [
-               %{extension: ".gz", size: result.compressed |> hd() |> Map.get(:size)}
-             ]
+      assert [%{extension: ".gz", size: size}] = result.compressed
+      assert is_integer(size) and size > 0
 
       html_path = Path.join(@output_path, "about/index.html")
       gz_path = html_path <> ".gz"

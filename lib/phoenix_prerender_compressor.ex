@@ -102,7 +102,8 @@ defmodule PhoenixPrerender.Compressor do
   end
 
   defp valid_compressor?(compressor) do
-    function_exported?(compressor, :compress, 1) and
+    Code.ensure_loaded?(compressor) and
+      function_exported?(compressor, :compress, 1) and
       function_exported?(compressor, :extension, 0)
   end
 
