@@ -121,5 +121,59 @@ defmodule PhoenixPrerender.PageCacheTest do
       Process.sleep(50)
       assert PageCache.size() == 0
     end
+
+    test "prewarm rejects file paths outside output directory" do
+      output_path = "test/tmp/prewarm_traversal"
+      File.rm_rf!(output_path)
+      File.mkdir_p!(output_path)
+
+      # Write a manifest with a path that escapes the output directory
+      manifest = %{
+        "generated_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+        "pages" => [
+          %{
+            "route" => "/evil",
+            "file" => "test/tmp/prewarm_traversal/../../../etc/passwd",
+            "size" => 100,
+            "checksum" => "abc",
+            "generated_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+        ]
+      }
+
+      File.write!(Path.join(output_path, "manifest.json"), Jason.encode!(manifest))
+
+      start_supervised!({PageCache, prewarm: true, output_path: output_path})
+      Process.sleep(50)
+
+      assert PageCache.size() == 0
+      assert :miss = PageCache.get("/evil")
+
+      File.rm_rf!(output_path)
+    end
+
+    test "prewarm skips malformed manifest entries" do
+      output_path = "test/tmp/prewarm_malformed"
+      File.rm_rf!(output_path)
+      File.mkdir_p!(output_path)
+
+      manifest = %{
+        "generated_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+        "pages" => [
+          %{"route" => 123, "file" => nil},
+          %{"missing" => "keys"},
+          %{}
+        ]
+      }
+
+      File.write!(Path.join(output_path, "manifest.json"), Jason.encode!(manifest))
+
+      start_supervised!({PageCache, prewarm: true, output_path: output_path})
+      Process.sleep(50)
+
+      assert PageCache.size() == 0
+
+      File.rm_rf!(output_path)
+    end
   end
 end

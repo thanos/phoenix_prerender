@@ -131,7 +131,8 @@ defmodule PhoenixPrerender.PageCache do
     case PhoenixPrerender.Manifest.read(output_path) do
       {:ok, manifest} ->
         pages = manifest["pages"] || []
-        Enum.reduce(pages, 0, &prewarm_page/2)
+        safe_prefix = Path.expand(output_path)
+        Enum.reduce(pages, 0, fn page, count -> prewarm_page(page, count, safe_prefix) end)
 
       {:error, reason} ->
         require Logger
@@ -140,11 +141,27 @@ defmodule PhoenixPrerender.PageCache do
     end
   end
 
-  # sobelow_skip ["Traversal.FileModule"]
-  defp prewarm_page(page, count) do
-    route = page["route"]
-    file = page["file"]
+  defp prewarm_page(%{"route" => route, "file" => file}, count, safe_prefix)
+       when is_binary(route) and is_binary(file) do
+    expanded = Path.expand(file)
 
+    if String.starts_with?(expanded, safe_prefix <> "/") or expanded == safe_prefix do
+      read_and_cache(route, file, count)
+    else
+      require Logger
+      Logger.warning("PhoenixPrerender: Prewarm skipped #{route}: path outside output directory")
+      count
+    end
+  end
+
+  defp prewarm_page(page, count, _safe_prefix) do
+    require Logger
+    Logger.warning("PhoenixPrerender: Prewarm skipped malformed entry: #{inspect(page)}")
+    count
+  end
+
+  # sobelow_skip ["Traversal.FileModule"]
+  defp read_and_cache(route, file, count) do
     case File.read(file) do
       {:ok, html} ->
         put(route, html, %{prewarmed: true})

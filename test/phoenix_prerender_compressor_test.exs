@@ -70,6 +70,38 @@ defmodule PhoenixPrerender.CompressorTest do
       assert ".gz" in extensions
       assert ".identity" in extensions
     end
+
+    test "skips compressors that raise exceptions" do
+      defmodule RaisingCompressor do
+        @behaviour PhoenixPrerender.Compressor
+        def compress(_content), do: raise("boom")
+        def extension, do: ".boom"
+      end
+
+      Application.put_env(:phoenix_prerender, :compressors, [
+        RaisingCompressor,
+        PhoenixPrerender.Compressor.Gzip
+      ])
+
+      results = Compressor.compress_all("hello")
+
+      assert [{".gz", _compressed}] = results
+    end
+
+    test "skips misconfigured modules missing behaviour functions" do
+      defmodule NotACompressor do
+        # No compress/1 or extension/0
+      end
+
+      Application.put_env(:phoenix_prerender, :compressors, [
+        NotACompressor,
+        PhoenixPrerender.Compressor.Gzip
+      ])
+
+      results = Compressor.compress_all("hello")
+
+      assert [{".gz", _compressed}] = results
+    end
   end
 
   describe "compressors/0" do

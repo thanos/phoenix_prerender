@@ -83,19 +83,46 @@ defmodule PhoenixPrerender.Compressor do
   def compress_all(content) do
     compressors()
     |> Enum.reduce([], fn compressor, acc ->
-      case compressor.compress(content) do
-        {:ok, compressed} ->
-          [{compressor.extension(), compressed} | acc]
-
-        {:error, reason} ->
-          Logger.warning(
-            "PhoenixPrerender: Compressor #{inspect(compressor)} failed: #{inspect(reason)}"
-          )
-
-          acc
-      end
+      try_compress(compressor, content, acc)
     end)
     |> Enum.reverse()
+  end
+
+  defp try_compress(compressor, content, acc) do
+    if valid_compressor?(compressor) do
+      do_compress(compressor, content, acc)
+    else
+      Logger.warning(
+        "PhoenixPrerender: Compressor #{inspect(compressor)} does not implement " <>
+          "the PhoenixPrerender.Compressor behaviour (missing compress/1 or extension/0)"
+      )
+
+      acc
+    end
+  end
+
+  defp valid_compressor?(compressor) do
+    function_exported?(compressor, :compress, 1) and
+      function_exported?(compressor, :extension, 0)
+  end
+
+  defp do_compress(compressor, content, acc) do
+    case compressor.compress(content) do
+      {:ok, compressed} ->
+        [{compressor.extension(), compressed} | acc]
+
+      {:error, reason} ->
+        Logger.warning(
+          "PhoenixPrerender: Compressor #{inspect(compressor)} failed: #{inspect(reason)}"
+        )
+
+        acc
+    end
+  rescue
+    e ->
+      Logger.warning("PhoenixPrerender: Compressor #{inspect(compressor)} raised: #{inspect(e)}")
+
+      acc
   end
 
   @doc """
