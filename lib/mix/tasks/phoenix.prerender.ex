@@ -182,6 +182,7 @@ defmodule Mix.Tasks.Phoenix.Prerender do
         |> Atom.to_string()
         |> Macro.camelize()
         |> Kernel.<>(suffix)
+        |> then(&("Elixir." <> &1))
         |> String.to_existing_atom()
 
       module_string ->
