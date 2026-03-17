@@ -257,11 +257,25 @@ defmodule PhoenixPrerender.Plug do
   defp send_prerendered_file(conn, file_path, path, cache_control) do
     start_time = System.monotonic_time()
 
+    {actual_file, encoding} = negotiate_encoding(conn, file_path)
+
+    conn =
+      conn
+      |> Plug.Conn.put_resp_content_type("text/html")
+      |> Plug.Conn.put_resp_header("cache-control", cache_control)
+      |> Plug.Conn.put_resp_header("x-prerendered", "true")
+
+    conn =
+      if encoding do
+        conn
+        |> Plug.Conn.put_resp_header("content-encoding", encoding)
+        |> Plug.Conn.put_resp_header("vary", "accept-encoding")
+      else
+        conn
+      end
+
     conn
-    |> Plug.Conn.put_resp_content_type("text/html")
-    |> Plug.Conn.put_resp_header("cache-control", cache_control)
-    |> Plug.Conn.put_resp_header("x-prerendered", "true")
-    |> Plug.Conn.send_file(200, file_path)
+    |> Plug.Conn.send_file(200, actual_file)
     |> tap(fn _ ->
       duration = System.monotonic_time() - start_time
 
@@ -297,5 +311,39 @@ defmodule PhoenixPrerender.Plug do
 
   defp isr_enabled? do
     PhoenixPrerender.Regenerator.isr_enabled?()
+  end
+
+  # -- Encoding negotiation ---------------------------------------------------
+
+  @encoding_candidates [
+    {"br", ".br"},
+    {"gzip", ".gz"}
+  ]
+
+  @doc false
+  def negotiate_encoding(conn, file_path) do
+    accepted = parse_accept_encoding(conn)
+
+    Enum.find_value(@encoding_candidates, {file_path, nil}, fn {encoding, ext} ->
+      accepted_and_exists?(encoding, file_path <> ext, accepted)
+    end)
+  end
+
+  defp accepted_and_exists?(encoding, compressed_path, accepted) do
+    if encoding in accepted and File.exists?(compressed_path) do
+      {compressed_path, encoding}
+    end
+  end
+
+  defp parse_accept_encoding(conn) do
+    conn
+    |> Plug.Conn.get_req_header("accept-encoding")
+    |> Enum.flat_map(fn value ->
+      value
+      |> String.split(",")
+      |> Enum.map(fn part ->
+        part |> String.split(";") |> List.first() |> String.trim()
+      end)
+    end)
   end
 end

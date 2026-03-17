@@ -257,6 +257,81 @@ defmodule PhoenixPrerender.PlugTest do
     end
   end
 
+  describe "Accept-Encoding negotiation" do
+    test "serves compressed file when Accept-Encoding: gzip and .gz file exists" do
+      write_prerendered("/about", "<html>About</html>")
+      # Write the .gz variant
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip, deflate")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == ["gzip"]
+      assert get_resp_header(conn, "vary") == ["accept-encoding"]
+    end
+
+    test "serves compressed file when Accept-Encoding: br and .br file exists" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".br", "fake-brotli-content")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "br, gzip")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == ["br"]
+      assert get_resp_header(conn, "vary") == ["accept-encoding"]
+    end
+
+    test "prefers br over gzip when both available" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+      File.write!(file_path <> ".br", "fake-brotli-content")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip, br")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "content-encoding") == ["br"]
+    end
+
+    test "serves uncompressed when no compressed file exists" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == []
+    end
+
+    test "serves uncompressed when no Accept-Encoding header" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == []
+    end
+  end
+
   describe "strict_paths" do
     test "serves page when path is in manifest" do
       write_prerendered("/about", "<html>About</html>")

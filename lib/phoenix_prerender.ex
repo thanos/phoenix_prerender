@@ -66,7 +66,13 @@ defmodule PhoenixPrerender do
         strict_paths: true,
 
         # PubSub server for distributed cache invalidation
-        pubsub: nil
+        pubsub: nil,
+
+        # List of compressor modules for pre-compression (default: [])
+        compressors: [],
+
+        # Prewarm the ETS cache from manifest on boot (default: false)
+        prewarm: false
 
   ## Marking Routes
 
@@ -335,4 +341,53 @@ defmodule PhoenixPrerender do
   def strict_paths do
     Application.get_env(:phoenix_prerender, :strict_paths, true)
   end
+
+  @doc """
+  Returns the list of configured compressor modules.
+
+  Defaults to `[]` (no pre-compression). See `PhoenixPrerender.Compressor`
+  for details on configuring compressors.
+
+  ## Examples
+
+      iex> PhoenixPrerender.compressors()
+      []
+  """
+  @spec compressors() :: [module()]
+  def compressors do
+    Application.get_env(:phoenix_prerender, :compressors, [])
+  end
+
+  @doc """
+  Returns whether cache prewarming is enabled.
+
+  When `true`, `PhoenixPrerender.PageCache` loads all pages from the
+  manifest into ETS on boot, eliminating first-request disk reads.
+  Defaults to `false`.
+
+  ## Examples
+
+      iex> PhoenixPrerender.prewarm?()
+      false
+  """
+  @spec prewarm?() :: boolean()
+  def prewarm? do
+    Application.get_env(:phoenix_prerender, :prewarm, false)
+  end
+
+  @doc """
+  Resolves an asset path to its digested counterpart via the endpoint.
+
+  Delegates to `PhoenixPrerender.StaticAsset.static_path/2`. See that
+  module for full documentation.
+
+  ## Examples
+
+      PhoenixPrerender.static_asset_path(MyAppWeb.Endpoint, "/assets/app.css")
+      #=> "/assets/app-ABC123.css"
+  """
+  @spec static_asset_path(module(), String.t()) :: String.t()
+  defdelegate static_asset_path(endpoint, path),
+    to: PhoenixPrerender.StaticAsset,
+    as: :static_path
 end

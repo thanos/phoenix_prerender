@@ -60,6 +60,18 @@ defmodule PhoenixPrerender.Telemetry do
   | `:path` | `String.t()` | URL path that was regenerated |
   | `:result` | `:ok \| :error` | Whether regeneration succeeded |
 
+  ### `[:phoenix_prerender, :prewarm]`
+
+  Emitted once after cache prewarming completes on boot.
+
+  | Key | Type | Description |
+  |---|---|---|
+  | **Measurements** | | |
+  | `:duration` | `integer` | Wall-clock time in native units |
+  | `:count` | `non_neg_integer` | Number of pages loaded into cache |
+  | **Metadata** | | |
+  | `:output_path` | `String.t()` | Directory where files were read from |
+
   ## Time Units
 
   All durations are in native time units. Convert them with
@@ -114,7 +126,8 @@ defmodule PhoenixPrerender.Telemetry do
         [:phoenix_prerender, :generate],
         [:phoenix_prerender, :render],
         [:phoenix_prerender, :serve],
-        [:phoenix_prerender, :regenerate]
+        [:phoenix_prerender, :regenerate],
+        [:phoenix_prerender, :prewarm]
       ]
   """
   @spec events() :: [[atom()]]
@@ -123,7 +136,8 @@ defmodule PhoenixPrerender.Telemetry do
       [:phoenix_prerender, :generate],
       [:phoenix_prerender, :render],
       [:phoenix_prerender, :serve],
-      [:phoenix_prerender, :regenerate]
+      [:phoenix_prerender, :regenerate],
+      [:phoenix_prerender, :prewarm]
     ]
   end
 

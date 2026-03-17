@@ -13,6 +13,7 @@ defmodule PhoenixPrerender.TelemetryTest do
       assert [:phoenix_prerender, :render] in events
       assert [:phoenix_prerender, :serve] in events
       assert [:phoenix_prerender, :regenerate] in events
+      assert [:phoenix_prerender, :prewarm] in events
     end
   end
 

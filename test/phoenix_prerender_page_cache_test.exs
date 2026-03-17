@@ -69,4 +69,57 @@ defmodule PhoenixPrerender.PageCacheTest do
       refute PageCache.stale?("/about", 300)
     end
   end
+
+  describe "prewarm" do
+    setup do
+      # Stop the default PageCache started by the outer setup
+      stop_supervised!(PageCache)
+      :ok
+    end
+
+    test "prewarming loads manifest pages into cache" do
+      output_path = "test/tmp/prewarm_test"
+      File.rm_rf!(output_path)
+      File.mkdir_p!(output_path)
+
+      # Generate pages to create manifest and files
+      {:ok, _results} =
+        PhoenixPrerender.Generator.generate(
+          router: PhoenixPrerenderWeb.Router,
+          endpoint: PhoenixPrerenderWeb.Endpoint,
+          output_path: output_path,
+          paths: ["/about", "/docs"]
+        )
+
+      # Start PageCache with prewarm enabled
+      start_supervised!({PageCache, prewarm: true, output_path: output_path})
+
+      # Give prewarm a moment to complete via handle_continue
+      Process.sleep(100)
+
+      assert {:ok, html, meta} = PageCache.get("/about")
+      assert is_binary(html)
+      assert html =~ "About"
+      assert meta.prewarmed == true
+
+      assert {:ok, _html, _meta} = PageCache.get("/docs")
+
+      File.rm_rf!(output_path)
+    end
+
+    test "prewarm does not crash when manifest is missing" do
+      start_supervised!({PageCache, prewarm: true, output_path: "test/tmp/nonexistent"})
+
+      # Give handle_continue a moment
+      Process.sleep(50)
+
+      assert PageCache.size() == 0
+    end
+
+    test "prewarm is off by default" do
+      start_supervised!(PageCache)
+      Process.sleep(50)
+      assert PageCache.size() == 0
+    end
+  end
 end

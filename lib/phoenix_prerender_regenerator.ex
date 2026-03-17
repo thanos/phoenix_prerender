@@ -260,6 +260,7 @@ defmodule PhoenixPrerender.Regenerator do
         {:ok, html} ->
           file_path = PhoenixPrerender.Path.full_output_path(path, output_path, url_style)
           PhoenixPrerender.Generator.write_atomic!(file_path, html)
+          PhoenixPrerender.Generator.write_compressed_variants!(file_path, html)
 
           # Update page cache if available
           try do

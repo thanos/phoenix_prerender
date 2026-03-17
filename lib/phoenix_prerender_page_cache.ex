@@ -95,9 +95,65 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     table = :ets.new(@table, [:set, :public, :named_table, read_concurrency: true])
-    {:ok, %{table: table}}
+    prewarm = Keyword.get(opts, :prewarm, PhoenixPrerender.prewarm?())
+    output_path = Keyword.get(opts, :output_path, PhoenixPrerender.output_path())
+    state = %{table: table, output_path: output_path}
+
+    if prewarm do
+      {:ok, state, {:continue, :prewarm}}
+    else
+      {:ok, state}
+    end
+  end
+
+  @impl true
+  def handle_continue(:prewarm, state) do
+    start_time = System.monotonic_time()
+    count = do_prewarm(state.output_path)
+    duration = System.monotonic_time() - start_time
+
+    :telemetry.execute(
+      [:phoenix_prerender, :prewarm],
+      %{duration: duration, count: count},
+      %{output_path: state.output_path}
+    )
+
+    require Logger
+
+    Logger.info("PhoenixPrerender: Prewarmed #{count} pages into cache")
+
+    {:noreply, state}
+  end
+
+  defp do_prewarm(output_path) do
+    case PhoenixPrerender.Manifest.read(output_path) do
+      {:ok, manifest} ->
+        pages = manifest["pages"] || []
+        Enum.reduce(pages, 0, &prewarm_page/2)
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("PhoenixPrerender: Prewarm failed to read manifest: #{inspect(reason)}")
+        0
+    end
+  end
+
+  defp prewarm_page(page, count) do
+    route = page["route"]
+    file = page["file"]
+
+    case File.read(file) do
+      {:ok, html} ->
+        put(route, html, %{prewarmed: true})
+        count + 1
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("PhoenixPrerender: Prewarm skipped #{route}: #{inspect(reason)}")
+        count
+    end
   end
 
   @doc """
