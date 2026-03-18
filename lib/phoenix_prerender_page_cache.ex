@@ -159,7 +159,7 @@ defmodule PhoenixPrerender.PageCache do
        when is_binary(route) and is_binary(file) do
     case resolve_real_path(file) do
       {:ok, real_path} ->
-        if String.starts_with?(real_path, safe_prefix <> "/") or real_path == safe_prefix do
+        if path_contained?(real_path, safe_prefix) do
           read_and_cache(route, real_path, count)
         else
           require Logger
@@ -183,6 +183,13 @@ defmodule PhoenixPrerender.PageCache do
     require Logger
     Logger.warning("PhoenixPrerender: Prewarm skipped malformed entry: #{inspect(page)}")
     count
+  end
+
+  defp path_contained?(child, parent) do
+    case Path.relative_to(child, parent) do
+      ^child -> false
+      relative -> not String.starts_with?(relative, "..")
+    end
   end
 
   # Resolves a path to its real location on disk, recursively following

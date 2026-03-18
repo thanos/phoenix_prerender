@@ -333,8 +333,7 @@ defmodule PhoenixPrerender.Plug do
     {"gzip", ".gz"}
   ]
 
-  @doc false
-  def negotiate_encoding(conn, file_path) do
+  defp negotiate_encoding(conn, file_path) do
     accepted = parse_accept_encoding(conn)
 
     case Enum.find_value(@encoding_candidates, nil, fn {encoding, ext} ->
@@ -391,26 +390,32 @@ defmodule PhoenixPrerender.Plug do
     end
   end
 
-  @doc false
-  def parse_accept_encoding(conn) do
+  defp parse_accept_encoding(conn) do
     conn
     |> Plug.Conn.get_req_header("accept-encoding")
     |> Enum.flat_map(&String.split(&1, ","))
     |> Enum.reduce(%{}, fn part, acc ->
-      {encoding, q} = parse_encoding_part(part)
-      Map.put(acc, encoding, q)
+      case parse_encoding_part(part) do
+        :skip -> acc
+        {encoding, q} -> Map.update(acc, encoding, q, &max(&1, q))
+      end
     end)
   end
 
   defp parse_encoding_part(part) do
     case String.split(part, ";") do
       [token] ->
-        {token |> String.trim() |> String.downcase(), 1.0}
+        encoding = token |> String.trim() |> String.downcase()
+        if encoding == "", do: :skip, else: {encoding, 1.0}
 
       [token | params] ->
         encoding = token |> String.trim() |> String.downcase()
-        q = extract_q_value(params)
-        {encoding, q}
+
+        if encoding == "" do
+          :skip
+        else
+          {encoding, extract_q_value(params)}
+        end
     end
   end
 
