@@ -202,10 +202,11 @@ defmodule PhoenixPrerender.Generator do
     case PhoenixPrerender.Renderer.render(endpoint, path) do
       {:ok, html} ->
         write_atomic!(file_path, html)
+        compressed = write_compressed_variants!(file_path, html)
         duration = System.monotonic_time() - start_time
         checksum = :crypto.hash(:sha256, html) |> Base.encode16(case: :lower)
 
-        %{
+        result = %{
           status: :ok,
           path: path,
           file: file_path,
@@ -214,6 +215,12 @@ defmodule PhoenixPrerender.Generator do
           generated_at: DateTime.utc_now() |> DateTime.to_iso8601(),
           duration: duration
         }
+
+        if compressed == [] do
+          result
+        else
+          Map.put(result, :compressed, compressed)
+        end
 
       {:error, reason} ->
         Logger.warning("PhoenixPrerender: Failed to render #{path}: #{inspect(reason)}")
@@ -248,5 +255,49 @@ defmodule PhoenixPrerender.Generator do
     tmp_path = file_path <> ".tmp"
     File.write!(tmp_path, content)
     File.rename!(tmp_path, file_path)
+  end
+
+  @doc """
+  Writes compressed variants of a file using configured compressors.
+
+  For each configured compressor, compresses the content and writes
+  the result alongside the original file with the appropriate extension
+  (e.g., `about/index.html.gz`).
+
+  Returns a list of maps describing the compressed files created:
+
+      [%{extension: ".gz", size: 1234}]
+
+  Returns an empty list when no compressors are configured or all fail.
+
+  ## Parameters
+
+    * `file_path` -- the path of the original (uncompressed) file
+    * `content` -- the original content to compress
+
+  ## Examples
+
+      PhoenixPrerender.Generator.write_compressed_variants!("output/about/index.html", "<html>...</html>")
+      #=> [%{extension: ".gz", size: 42}]
+  """
+  @spec write_compressed_variants!(String.t(), binary()) :: [map()]
+  # sobelow_skip ["Traversal.FileModule"]
+  def write_compressed_variants!(file_path, content) do
+    PhoenixPrerender.Compressor.compress_all(content)
+    |> Enum.flat_map(fn {ext, compressed} ->
+      if safe_extension?(ext) do
+        write_atomic!(file_path <> ext, compressed)
+        [%{extension: ext, size: byte_size(compressed)}]
+      else
+        Logger.warning("PhoenixPrerender: Rejecting unsafe compressor extension: #{inspect(ext)}")
+        []
+      end
+    end)
+  end
+
+  @safe_extension_pattern ~r/^\.[A-Za-z0-9]+$/
+
+  defp safe_extension?(ext) do
+    is_binary(ext) and Regex.match?(@safe_extension_pattern, ext)
   end
 end

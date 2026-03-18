@@ -10,12 +10,16 @@ Generate static HTML from your Phoenix routes at build time, serve them instantl
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Guide](#guide)
+  - [Configuration Guide](#configuration-guide)
   - [How Generation Works](#how-generation-works)
   - [URL Styles](#url-styles)
   - [The Serving Plug](#the-serving-plug)
   - [Incremental Static Regeneration (ISR)](#incremental-static-regeneration-isr)
   - [Distributed Regeneration](#distributed-regeneration)
   - [Page Cache](#page-cache)
+  - [Cache Prewarming](#cache-prewarming)
+  - [Static Asset Path Helper](#static-asset-path-helper)
+  - [Pre-Compression](#pre-compression)
   - [Mix Task](#mix-task)
   - [Telemetry](#telemetry)
   - [Manifest & Sitemap](#manifest--sitemap)
@@ -36,7 +40,10 @@ Generate static HTML from your Phoenix routes at build time, serve them instantl
 - **Atomic writes** — write-then-rename prevents serving partially written files
 - **Concurrent generation** — render pages in parallel with `Task.async_stream`
 - **Manifest & sitemap** — automatic `manifest.json` and `sitemap.xml` generation
-- **Telemetry** — events for generation, rendering, serving, and regeneration
+- **Pluggable pre-compression** — generate `.gz` and `.br` files at build time, serve with `Accept-Encoding` negotiation
+- **Cache prewarming** — load prerendered pages into ETS on boot for zero first-request latency
+- **Static asset path helper** — resolve digested asset paths (`/assets/app.css` → `/assets/app-ABC123.css`) in prerendered content
+- **Telemetry** — events for generation, rendering, serving, regeneration, and prewarming
 - **Mix task** — `mix phoenix.prerender` for CLI and CI integration
 - **Router macro** — `prerender do ... end` block to annotate routes without repetition
 - **Verified routes compatible** — generated files match canonical `~p` paths
@@ -49,7 +56,7 @@ Generate static HTML from your Phoenix routes at build time, serve them instantl
 # mix.exs
 defp deps do
   [
-    {:phoenix_prerender, "~> 0.1.1"}
+    {:phoenix_prerender, "~> 0.2.0"}
   ]
 end
 ```
@@ -177,7 +184,16 @@ config :phoenix_prerender,
   base_url: "https://example.com",
 
   # PubSub server for distributed cache invalidation (default: nil)
-  pubsub: nil
+  pubsub: nil,
+
+  # Only serve paths listed in manifest.json (default: true)
+  strict_paths: true,
+
+  # Compressor modules for pre-compression (default: [])
+  compressors: [],
+
+  # Prewarm ETS cache from manifest on boot (default: false)
+  prewarm: false
 ```
 
 > **Note:** The `output_path` and `url_style` settings are shared between the
@@ -187,6 +203,100 @@ config :phoenix_prerender,
 > The safest approach is to set these values once in application config.
 
 ## Guide
+
+### Configuration Guide
+
+The [Configuration](#configuration) reference above lists every option with its default. This section explains how to combine them for common deployment scenarios.
+
+#### Minimal production setup
+
+The simplest production configuration enables the serving plug and sets a base URL for sitemap generation:
+
+```elixir
+# config/prod.exs
+config :phoenix_prerender,
+  enabled: true,
+  base_url: "https://myapp.com"
+```
+
+Add the plug to your endpoint and run `mix phoenix.prerender` during your build. That's all you need for static serving.
+
+#### ISR with cache prewarming
+
+For sites that need pages to stay fresh without full rebuilds, enable ISR and prewarm the cache so the first request after a deploy is served from memory:
+
+```elixir
+# config/prod.exs
+config :phoenix_prerender,
+  enabled: true,
+  isr: true,
+  revalidate: 300,
+  prewarm: true,
+  base_url: "https://myapp.com"
+```
+
+```elixir
+# lib/my_app/application.ex
+children = [
+  MyAppWeb.Endpoint,
+  {PhoenixPrerender.PageCache, prewarm: true},
+  {PhoenixPrerender.Regenerator, endpoint: MyAppWeb.Endpoint}
+]
+```
+
+On boot, `PageCache` reads the manifest, loads all pages into ETS, and logs the count. ISR then keeps them fresh in the background.
+
+#### Pre-compression for bandwidth savings
+
+Enable gzip pre-compression to generate `.gz` files at build time. The plug serves them automatically when the client supports it:
+
+```elixir
+# config/config.exs
+config :phoenix_prerender,
+  compressors: [PhoenixPrerender.Compressor.Gzip]
+```
+
+For Brotli, implement the `PhoenixPrerender.Compressor` behaviour (see [Pre-Compression](#pre-compression)) and add your module to the list. The plug prefers `br` over `gzip` when both are available.
+
+#### Multi-node cluster
+
+For distributed deployments, add PubSub so cache invalidations propagate across nodes:
+
+```elixir
+# config/prod.exs
+config :phoenix_prerender,
+  enabled: true,
+  isr: true,
+  revalidate: 300,
+  prewarm: true,
+  pubsub: MyApp.PubSub,
+  base_url: "https://myapp.com",
+  compressors: [PhoenixPrerender.Compressor.Gzip]
+```
+
+See [Distributed Regeneration](#distributed-regeneration) for supervision tree setup.
+
+#### Development
+
+In development, prerendering is disabled by default (`enabled: false`). You can still generate pages for testing:
+
+```bash
+mix phoenix.prerender --path /about
+```
+
+The static asset path helper gracefully returns the original path when the endpoint has no static manifest configured, so templates work without changes between dev and prod.
+
+#### Per-environment overrides
+
+Some settings make sense to vary by environment:
+
+| Setting | Dev | Test | Prod |
+|---|---|---|---|
+| `enabled` | `false` | `false` | `true` |
+| `prewarm` | `false` | `false` | `true` |
+| `compressors` | `[]` | `[]` | `[Compressor.Gzip]` |
+| `isr` | `false` | `false` | `true` / `false` |
+| `output_path` | default | test-specific | default |
 
 ### How Generation Works
 
@@ -319,6 +429,105 @@ The cache supports:
 - `stale?/2` — check if an entry is older than a threshold
 - `size/0` — count cached entries
 
+### Cache Prewarming
+
+By default, the first request for each page incurs a disk read. Cache prewarming loads all pages from the manifest into ETS on boot, so every request is served from memory from the start.
+
+```elixir
+# config/prod.exs
+config :phoenix_prerender,
+  prewarm: true
+```
+
+```elixir
+# lib/my_app/application.ex
+children = [
+  MyAppWeb.Endpoint,
+  {PhoenixPrerender.PageCache, prewarm: true}
+]
+```
+
+Prewarming uses `handle_continue`, so the supervisor does not block — the application starts immediately, and the ETS table is populated asynchronously. Requests that arrive before prewarming completes get a cache miss and fall back to disk, so there is no downtime window.
+
+A `[:phoenix_prerender, :prewarm]` telemetry event is emitted with `%{duration: native_time, count: pages_loaded}` when prewarming completes.
+
+Missing files are warned and skipped — a partially present output directory does not crash the application.
+
+### Static Asset Path Helper
+
+When prerendering at build time, templates may reference undigested asset paths. `PhoenixPrerender.StaticAsset.static_path/2` resolves `/assets/app.css` → `/assets/app-ABC123.css` using the endpoint's static manifest:
+
+```elixir
+PhoenixPrerender.static_asset_path(MyAppWeb.Endpoint, "/assets/app.css")
+#=> "/assets/app-ABC123.css"
+```
+
+During `mix phoenix.prerender`, the endpoint is started (the task calls `app.start`), so this resolution works automatically. In dev mode or when the manifest is not configured, the original path is returned unchanged as a graceful fallback.
+
+> **Note:** Phoenix's own `Endpoint.static_path/1` already works in templates
+> during prerendering. This helper provides a standalone function for
+> programmatic use and edge cases outside of templates.
+
+### Pre-Compression
+
+Pre-compression generates compressed variants of HTML files at build time (e.g., `about/index.html.gz`), so the serving plug can send them directly without on-the-fly compression overhead.
+
+#### Enabling gzip pre-compression
+
+```elixir
+# config/config.exs
+config :phoenix_prerender,
+  compressors: [PhoenixPrerender.Compressor.Gzip]
+```
+
+This uses Erlang's built-in `:zlib` module — no NIF dependencies required. After generation, each page will have a `.gz` sibling:
+
+```
+priv/static/prerendered/
+├── about/
+│   ├── index.html
+│   └── index.html.gz
+```
+
+#### Adding Brotli (or any custom compressor)
+
+Compression is pluggable via the `PhoenixPrerender.Compressor` behaviour. Implement `compress/1` and `extension/0`:
+
+```elixir
+defmodule MyApp.BrotliCompressor do
+  @behaviour PhoenixPrerender.Compressor
+
+  @impl true
+  def compress(content) do
+    case ExBrotli.compress(content) do
+      {:ok, compressed} -> {:ok, compressed}
+      error -> {:error, error}
+    end
+  end
+
+  @impl true
+  def extension, do: ".br"
+end
+```
+
+```elixir
+config :phoenix_prerender,
+  compressors: [PhoenixPrerender.Compressor.Gzip, MyApp.BrotliCompressor]
+```
+
+#### How serving works
+
+When `PhoenixPrerender.Plug` serves a page from disk, it negotiates encoding:
+
+1. Parses the `accept-encoding` request header
+2. Checks for compressed files in preference order: `br` > `gzip` > identity
+3. If a compressed file exists, serves it with `content-encoding` and `vary: accept-encoding` headers
+4. If no compressed file exists, serves the uncompressed original
+
+Cache-served responses (from ETS) are sent as-is without pre-compression headers. If your endpoint or web server (Cowboy/Bandit) is configured for response compression, it will compress these responses on the fly. Otherwise, they are served uncompressed.
+
+Compressors are fault-tolerant: if a compressor fails, it logs a warning and is skipped. The uncompressed file is always written regardless.
+
 ### Mix Task
 
 The `mix phoenix.prerender` (or `mix phx.prerender`) task provides CLI access to generation:
@@ -364,6 +573,7 @@ PhoenixPrerender emits telemetry events at key lifecycle points:
 | `[:phoenix_prerender, :render]` | After rendering a single page | `duration` | `path`, `status` |
 | `[:phoenix_prerender, :serve]` | When serving a prerendered page | `duration` | `path`, `source` |
 | `[:phoenix_prerender, :regenerate]` | After ISR regeneration | `duration` | `path`, `result` |
+| `[:phoenix_prerender, :prewarm]` | After cache prewarming on boot | `duration`, `count` | `output_path` |
 
 All durations are in native time units. Use with `Telemetry.Metrics`:
 
@@ -475,13 +685,16 @@ cd demo && mix run bench/plug_serving_bench.exs
 | Module | Purpose |
 |---|---|
 | `PhoenixPrerender` | Main module, configuration, `prerender/1` macro |
-| `PhoenixPrerender.Plug` | Serves prerendered files from disk |
-| `PhoenixPrerender.Generator` | Concurrent page generation with atomic writes |
+| `PhoenixPrerender.Plug` | Serves prerendered files from disk with encoding negotiation |
+| `PhoenixPrerender.Generator` | Concurrent page generation with atomic writes and pre-compression |
 | `PhoenixPrerender.Renderer` | Renders routes through the endpoint pipeline |
+| `PhoenixPrerender.StaticAsset` | Resolves digested asset paths via endpoint |
+| `PhoenixPrerender.Compressor` | Behaviour and orchestrator for pluggable pre-compression |
+| `PhoenixPrerender.Compressor.Gzip` | Built-in gzip compressor using `:zlib` (no NIF) |
 | `PhoenixPrerender.Route` | Discovers prerender-marked routes |
 | `PhoenixPrerender.Path` | URL-to-filesystem path mapping |
 | `PhoenixPrerender.Manifest` | Manifest and sitemap read/write |
-| `PhoenixPrerender.PageCache` | ETS-based in-memory page cache |
+| `PhoenixPrerender.PageCache` | ETS-based in-memory page cache with optional prewarming |
 | `PhoenixPrerender.Regenerator` | ISR with ETS-based lock management |
 | `PhoenixPrerender.Cluster` | Distributed regeneration via `:global` and PubSub |
 | `PhoenixPrerender.Telemetry` | Telemetry event definitions and default logger |
@@ -489,11 +702,11 @@ cd demo && mix run bench/plug_serving_bench.exs
 
 ## Roadmap
 
-### v0.2.0 — Optimizations & Developer Experience
+### v0.2.0 — Optimizations & Developer Experience ✅
 
-- **Static asset path helper** — a `static_asset_path/2` function for resolving digested asset paths inside prerendered templates
-- **Gzip & Brotli pre-compression** — generate `.gz` and `.br` files alongside HTML for zero-overhead compressed serving
-- **Cache prewarm on boot** — automatically load prerendered pages from disk into ETS on application start
+- ~~**Static asset path helper** — a `static_asset_path/2` function for resolving digested asset paths inside prerendered templates~~
+- ~~**Gzip & Brotli pre-compression** — generate `.gz` and `.br` files alongside HTML for zero-overhead compressed serving~~
+- ~~**Cache prewarm on boot** — automatically load prerendered pages from disk into ETS on application start~~
 
 ### v0.3.0 — Distributed Consistency & Cache Control
 

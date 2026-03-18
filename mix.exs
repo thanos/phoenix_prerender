@@ -1,7 +1,7 @@
 defmodule PhoenixPrerender.MixProject do
   use Mix.Project
 
-  @version "0.1.1"
+  @version "0.2.0"
   @source_url "https://github.com/thanos/phoenix_prerender"
 
   def project do
@@ -101,6 +101,8 @@ defmodule PhoenixPrerender.MixProject do
       files: ~w(
         lib/phoenix_prerender.ex
         lib/phoenix_prerender_cluster.ex
+        lib/phoenix_prerender_compressor.ex
+        lib/phoenix_prerender_compressor_gzip.ex
         lib/phoenix_prerender_generator.ex
         lib/phoenix_prerender_manifest.ex
         lib/phoenix_prerender_page_cache.ex
@@ -109,6 +111,7 @@ defmodule PhoenixPrerender.MixProject do
         lib/phoenix_prerender_regenerator.ex
         lib/phoenix_prerender_renderer.ex
         lib/phoenix_prerender_route.ex
+        lib/phoenix_prerender_static_asset.ex
         lib/phoenix_prerender_telemetry.ex
         lib/mix
         LICENSE
@@ -131,7 +134,12 @@ defmodule PhoenixPrerender.MixProject do
           PhoenixPrerender,
           PhoenixPrerender.Plug,
           PhoenixPrerender.Generator,
-          PhoenixPrerender.Renderer
+          PhoenixPrerender.Renderer,
+          PhoenixPrerender.StaticAsset
+        ],
+        Compression: [
+          PhoenixPrerender.Compressor,
+          PhoenixPrerender.Compressor.Gzip
         ],
         "Route Discovery": [
           PhoenixPrerender.Route,
@@ -167,6 +175,7 @@ defmodule PhoenixPrerender.MixProject do
       {"compile --warnings-as-errors", :dev},
       {"format --check-formatted", :dev},
       {"credo --strict", :dev},
+      {"sobelow --config", :dev},
       # {"dialyzer", :dev},
       {"test --cover", :test},
       {"docs --warnings-as-errors", :dev}
