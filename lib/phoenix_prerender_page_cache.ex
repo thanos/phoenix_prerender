@@ -62,6 +62,11 @@ defmodule PhoenixPrerender.PageCache do
   ## Options
 
     * `:name` -- the process name (default: `PhoenixPrerender.PageCache`)
+    * `:prewarm` -- whether to load pages from the manifest into cache on
+      boot (default: from `PhoenixPrerender.prewarm?/0`, which defaults
+      to `false`)
+    * `:output_path` -- directory containing prerendered files, used for
+      prewarming (default: from `PhoenixPrerender.output_path/0`)
 
   ## Examples
 
@@ -69,6 +74,9 @@ defmodule PhoenixPrerender.PageCache do
 
       # With a custom name
       {:ok, pid} = PhoenixPrerender.PageCache.start_link(name: :my_cache)
+
+      # With prewarming enabled
+      {:ok, pid} = PhoenixPrerender.PageCache.start_link(prewarm: true)
   """
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
@@ -177,41 +185,43 @@ defmodule PhoenixPrerender.PageCache do
     count
   end
 
-  # Resolves a path to its real location on disk, following symlinks.
-  # Uses File.stat/1 (which follows symlinks) to verify the file exists,
-  # then checks via :file.read_link/1 whether it's a symlink and resolves
-  # the target if so.
+  # Resolves a path to its real location on disk, recursively following
+  # symlink chains. Uses :file.read_link/1 in a loop (bounded to 40 hops
+  # to match typical OS limits) until a non-symlink is reached, then
+  # verifies the final target exists via File.stat/1.
   defp resolve_real_path(path) do
-    expanded = Path.expand(path)
+    resolve_real_path(Path.expand(path), 40)
+  end
 
-    case :file.read_link(String.to_charlist(expanded)) do
+  defp resolve_real_path(_path, 0), do: {:error, :eloop}
+
+  defp resolve_real_path(path, hops_remaining) do
+    case :file.read_link(String.to_charlist(path)) do
       {:ok, target} ->
-        {:ok, resolve_symlink_target(target, expanded)}
+        resolved = resolve_symlink_target(target, path)
+        resolve_real_path(resolved, hops_remaining - 1)
 
       {:error, :einval} ->
-        resolve_regular_path(expanded)
+        # Not a symlink — verify it exists
+        case File.stat(path) do
+          {:ok, _} -> {:ok, path}
+          {:error, reason} -> {:error, reason}
+        end
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp resolve_symlink_target(target, expanded) do
+  defp resolve_symlink_target(target, link_path) do
     target_str = List.to_string(target)
 
     if Path.type(target_str) == :absolute do
       target_str
     else
-      Path.join(Path.dirname(expanded), target_str)
+      Path.join(Path.dirname(link_path), target_str)
     end
     |> Path.expand()
-  end
-
-  defp resolve_regular_path(expanded) do
-    case File.stat(expanded) do
-      {:ok, _} -> {:ok, expanded}
-      {:error, reason} -> {:error, reason}
-    end
   end
 
   # sobelow_skip ["Traversal.FileModule"]

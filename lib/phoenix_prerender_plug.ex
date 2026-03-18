@@ -258,6 +258,7 @@ defmodule PhoenixPrerender.Plug do
     case negotiate_encoding(conn, file_path) do
       :not_acceptable ->
         conn
+        |> append_vary("accept-encoding")
         |> Plug.Conn.send_resp(406, "Not Acceptable")
         |> Plug.Conn.halt()
 
