@@ -13,6 +13,40 @@ defmodule PhoenixPrerender.RouteTest do
       assert "/docs/terms" in paths
     end
 
+    test "discovers routes with prerender: :bots_only and :always" do
+      routes = Route.discover(PhoenixPrerenderWeb.Router)
+      paths = Enum.map(routes, & &1.path)
+
+      assert "/changelog" in paths
+      assert "/status" in paths
+    end
+
+    test "returns prerender_mode for each route" do
+      routes = Route.discover(PhoenixPrerenderWeb.Router)
+
+      about = Enum.find(routes, &(&1.path == "/about"))
+      assert about.prerender_mode == true
+
+      changelog = Enum.find(routes, &(&1.path == "/changelog"))
+      assert changelog.prerender_mode == :bots_only
+
+      status = Enum.find(routes, &(&1.path == "/status"))
+      assert status.prerender_mode == :always
+    end
+
+    test "returns isr flag for each route" do
+      routes = Route.discover(PhoenixPrerenderWeb.Router)
+
+      about = Enum.find(routes, &(&1.path == "/about"))
+      assert about.isr == false
+
+      changelog = Enum.find(routes, &(&1.path == "/changelog"))
+      assert changelog.isr == false
+
+      status = Enum.find(routes, &(&1.path == "/status"))
+      assert status.isr == true
+    end
+
     test "excludes routes without prerender metadata" do
       routes = Route.discover(PhoenixPrerenderWeb.Router)
       paths = Enum.map(routes, & &1.path)

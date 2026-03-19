@@ -76,19 +76,24 @@ defmodule PhoenixPrerender.Route do
     |> Enum.map(&normalize_route/1)
   end
 
-  defp match_private?(%{metadata: metadata}, key, value) when is_map(metadata) do
-    Map.get(metadata, key) == value
+  defp match_private?(%{metadata: metadata}, key, _value) when is_map(metadata) do
+    val = Map.get(metadata, key)
+    val != nil and val != false
   end
 
   defp match_private?(_, _key, _value), do: false
 
   defp normalize_route(route) do
+    metadata = Map.get(route, :metadata, %{})
+
     %{
       path: route.path,
       verb: route.verb,
       plug: route.plug,
       plug_opts: route.plug_opts,
-      metadata: Map.get(route, :metadata, %{})
+      metadata: metadata,
+      prerender_mode: Map.get(metadata, :prerender, true),
+      isr: Map.get(metadata, :isr, false)
     }
   end
 

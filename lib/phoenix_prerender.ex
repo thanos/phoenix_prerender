@@ -65,6 +65,11 @@ defmodule PhoenixPrerender do
         # Only serve paths listed in manifest.json
         strict_paths: true,
 
+        # Only serve prerendered pages to search engine crawlers.
+        # When true, browsers get passed through to the live app.
+        # Useful for LiveView routes where prerendered HTML is for SEO only.
+        bots_only: false,
+
         # PubSub server for distributed cache invalidation
         pubsub: nil
 
@@ -175,9 +180,7 @@ defmodule PhoenixPrerender do
     {verb, meta, append_private(args)}
   end
 
-  defp inject_single({:live, meta, args}) do
-    {:live, meta, append_private(args)}
-  end
+  defp inject_single({:live, _meta, _args} = expr), do: expr
 
   defp inject_single(other), do: other
 
@@ -334,5 +337,28 @@ defmodule PhoenixPrerender do
   @spec strict_paths() :: boolean()
   def strict_paths do
     Application.get_env(:phoenix_prerender, :strict_paths, true)
+  end
+
+  @doc """
+  Returns whether prerendered pages should only be served to crawlers.
+
+  When `true`, `PhoenixPrerender.Plug` checks the `User-Agent` header
+  and only serves prerendered content to known search engine bots.
+  Regular browsers are passed through to the live Phoenix pipeline.
+
+  This is essential for LiveView routes where the prerendered HTML
+  contains stale CSRF tokens and session data that would break
+  LiveView's WebSocket connection.
+
+  Defaults to `false`.
+
+  ## Examples
+
+      iex> PhoenixPrerender.bots_only()
+      false
+  """
+  @spec bots_only() :: boolean()
+  def bots_only do
+    Application.get_env(:phoenix_prerender, :bots_only, false)
   end
 end

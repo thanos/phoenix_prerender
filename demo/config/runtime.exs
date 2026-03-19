@@ -1,5 +1,8 @@
 import Config
 
+config :phoenix_prerender,
+  enabled: System.get_env("PRERENDER_ENABLED", "true") == "true"
+
 if config_env() == :prod do
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||

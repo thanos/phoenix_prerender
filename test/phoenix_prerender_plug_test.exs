@@ -257,6 +257,106 @@ defmodule PhoenixPrerender.PlugTest do
     end
   end
 
+  describe "per-route ISR from manifest" do
+    setup do
+      start_supervised!(PhoenixPrerender.PageCache)
+      start_supervised!({PhoenixPrerender.Regenerator, endpoint: PhoenixPrerenderWeb.Endpoint})
+
+      original_isr = Application.get_env(:phoenix_prerender, :isr)
+      original_revalidate = Application.get_env(:phoenix_prerender, :revalidate)
+
+      # Global ISR is OFF — only per-route ISR should trigger
+      Application.put_env(:phoenix_prerender, :isr, false)
+      Application.put_env(:phoenix_prerender, :revalidate, 0)
+
+      on_exit(fn ->
+        if original_isr,
+          do: Application.put_env(:phoenix_prerender, :isr, original_isr),
+          else: Application.delete_env(:phoenix_prerender, :isr)
+
+        if original_revalidate,
+          do: Application.put_env(:phoenix_prerender, :revalidate, original_revalidate),
+          else: Application.delete_env(:phoenix_prerender, :revalidate)
+
+        PhoenixPrerender.PageCache.clear()
+      end)
+
+      :ok
+    end
+
+    test "triggers ISR for route with isr: true in manifest" do
+      write_prerendered("/status", "<html>Stale Status</html>")
+
+      write_manifest([
+        %{
+          path: "/status",
+          file: "status/index.html",
+          size: 25,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always,
+          isr: true
+        }
+      ])
+
+      file_path = PhoenixPrerender.Path.full_output_path("/status", @output_path, :dir_index)
+      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
+
+      conn =
+        build_conn(:get, "/status")
+        |> call_plug(strict_paths: true, endpoint: PhoenixPrerenderWeb.Endpoint)
+
+      assert conn.halted
+      assert conn.status == 200
+
+      Process.sleep(100)
+    end
+
+    test "does not trigger ISR for route with isr: false in manifest" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: true,
+          isr: false
+        }
+      ])
+
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(strict_paths: true, endpoint: PhoenixPrerenderWeb.Endpoint)
+
+      # Page is served but no ISR triggered (global ISR is off, route ISR is off)
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "falls back to global ISR when no manifest (strict_paths: false)" do
+      Application.put_env(:phoenix_prerender, :isr, true)
+
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(strict_paths: false, endpoint: PhoenixPrerenderWeb.Endpoint)
+
+      assert conn.halted
+      assert conn.status == 200
+
+      Process.sleep(100)
+    end
+  end
+
   describe "strict_paths" do
     test "serves page when path is in manifest" do
       write_prerendered("/about", "<html>About</html>")
@@ -318,6 +418,211 @@ defmodule PhoenixPrerender.PlugTest do
 
       assert conn.halted
       assert conn.status == 200
+    end
+  end
+
+  describe "bots_only option (global)" do
+    test "passes through browser requests when bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(bots_only: true)
+
+      refute conn.halted
+    end
+
+    test "serves prerendered page to Googlebot when bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header(
+          "user-agent",
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        )
+        |> call_plug(bots_only: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "serves prerendered page to Bingbot when bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header(
+          "user-agent",
+          "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"
+        )
+        |> call_plug(bots_only: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "serves to all clients when bots_only is false" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(bots_only: false)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "passes through when no user-agent header and bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(bots_only: true)
+
+      refute conn.halted
+    end
+  end
+
+  describe "per-route bots_only from manifest" do
+    test "passes through browser request for bots_only route in manifest" do
+      write_prerendered("/changelog", "<html>Changelog</html>")
+
+      write_manifest([
+        %{
+          path: "/changelog",
+          file: "changelog/index.html",
+          size: 25,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :bots_only
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/changelog")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      refute conn.halted
+    end
+
+    test "serves bots_only route to Googlebot" do
+      write_prerendered("/changelog", "<html>Changelog</html>")
+
+      write_manifest([
+        %{
+          path: "/changelog",
+          file: "changelog/index.html",
+          size: 25,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :bots_only
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/changelog")
+        |> put_req_header(
+          "user-agent",
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        )
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "serves route with prerender_mode true to browsers" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: true
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "serves route with prerender_mode always to browsers" do
+      write_prerendered("/yolo", "<html>Yolo</html>")
+
+      write_manifest([
+        %{
+          path: "/yolo",
+          file: "yolo/index.html",
+          size: 18,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/yolo")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "old manifest without prerender_mode serves to all (backward compat)" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z"
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "global bots_only overrides per-route true mode" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: true
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true, bots_only: true)
+
+      refute conn.halted
     end
   end
 end

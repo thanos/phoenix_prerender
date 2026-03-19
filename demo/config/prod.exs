@@ -1,4 +1,3 @@
 import Config
 
-config :phoenix_prerender,
-  enabled: true
+config :phoenix_prerender, []

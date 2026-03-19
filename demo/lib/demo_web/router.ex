@@ -40,15 +40,14 @@ defmodule DemoWeb.Router do
     end
   end
 
-  # Prerendered LiveView routes
+  # Prerendered LiveView routes (bots_only: prerendered HTML for SEO, live app for browsers)
   scope "/", DemoWeb do
     pipe_through :browser
 
-    # LiveView + prerender: static HTML first, then hydrated
-    live "/changelog", ChangelogLive, :index, metadata: %{prerender: true}
-
-    # ISR candidate: prerendered, regenerated when stale
-    live "/status", StatusLive, :index, metadata: %{prerender: true}
+    prerender do
+      live "/changelog", ChangelogLive, :index, metadata: %{prerender: :bots_only}
+      live "/status", StatusLive, :index, metadata: %{prerender: :always, isr: true}
+    end
   end
 
   # Dynamic routes (NOT prerendered)

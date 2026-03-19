@@ -213,6 +213,11 @@ defmodule Mix.Tasks.Phoenix.Prerender do
 
     {:ok, results} = PhoenixPrerender.Generator.generate(gen_opts)
 
+    # Write a generation stamp so the running server can detect that files
+    # changed on disk and invalidate its ETS cache. This works across OS
+    # processes — unlike PageCache.clear() which only affects the current BEAM.
+    PhoenixPrerender.GenerationStamp.write!(output_path)
+
     successes = Enum.count(results, &(&1.status == :ok))
     failures = Enum.count(results, &(&1.status == :error))
 

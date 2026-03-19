@@ -79,7 +79,9 @@ defmodule PhoenixPrerender.Manifest do
             file: entry.file,
             size: entry.size,
             checksum: entry.checksum,
-            generated_at: entry.generated_at
+            generated_at: entry.generated_at,
+            prerender_mode: to_string(Map.get(entry, :prerender_mode, true)),
+            isr: Map.get(entry, :isr, false)
           }
         end)
     }
