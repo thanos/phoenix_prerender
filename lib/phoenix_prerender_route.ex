@@ -4,8 +4,11 @@ defmodule PhoenixPrerender.Route do
 
   Route discovery uses `Phoenix.Router.routes/1` to enumerate all routes
   defined in a router module, then filters by checking each route's
-  `metadata` map for the configured key-value pair (default:
-  `prerender: true`).
+  `metadata` map for the configured key (default: `:prerender`).
+
+  By default, any truthy value matches (`true`, `:bots_only`, `:always`,
+  etc.). When a specific `:private_value` is passed, only routes with
+  that exact value are returned.
 
   This approach uses `route.path` as the canonical source of truth,
   which means scope prefixes, nested scopes, and verified routes all
@@ -49,36 +52,50 @@ defmodule PhoenixPrerender.Route do
 
     * `:private_key` -- the metadata key to match
       (default: `PhoenixPrerender.route_private_key/0`)
-    * `:private_value` -- the metadata value to match
+    * `:private_value` -- when provided, only match routes with this
+      exact metadata value. When omitted (or set to the default), any
+      truthy value matches (`true`, `:bots_only`, `:always`, etc.).
       (default: `PhoenixPrerender.route_private_value/0`)
 
   ## Examples
 
+      # Discovers all routes with any truthy :prerender value
       routes = PhoenixPrerender.Route.discover(MyAppWeb.Router)
       #=> [%{path: "/about", verb: :get, plug: MyAppWeb.PageController, ...}, ...]
 
-      # With custom metadata key
+      # Only routes with prerender: :bots_only
+      PhoenixPrerender.Route.discover(MyAppWeb.Router,
+        private_value: :bots_only
+      )
+
+      # Custom metadata key with exact value
       PhoenixPrerender.Route.discover(MyAppWeb.Router,
         private_key: :static,
-        private_value: true
+        private_value: :seo
       )
   """
   @spec discover(module(), keyword()) :: [map()]
   def discover(router, opts \\ []) do
     key = Keyword.get(opts, :private_key, PhoenixPrerender.route_private_key())
-    value = Keyword.get(opts, :private_value, PhoenixPrerender.route_private_value())
+    exact_value = Keyword.get(opts, :private_value)
 
     router
     |> Phoenix.Router.routes()
     |> Enum.filter(fn route ->
-      match_private?(route, key, value)
+      match_private?(route, key, exact_value)
     end)
     |> Enum.map(&normalize_route/1)
   end
 
-  defp match_private?(%{metadata: metadata}, key, _value) when is_map(metadata) do
+  # When no specific value is requested, match any truthy metadata value
+  defp match_private?(%{metadata: metadata}, key, nil) when is_map(metadata) do
     val = Map.get(metadata, key)
     val != nil and val != false
+  end
+
+  # When a specific value is requested, do exact matching
+  defp match_private?(%{metadata: metadata}, key, exact) when is_map(metadata) do
+    Map.get(metadata, key) == exact
   end
 
   defp match_private?(_, _key, _value), do: false

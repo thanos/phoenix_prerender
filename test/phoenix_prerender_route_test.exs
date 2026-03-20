@@ -74,6 +74,42 @@ defmodule PhoenixPrerender.RouteTest do
 
       assert routes == []
     end
+
+    test "exact match with private_value: :bots_only" do
+      routes =
+        Route.discover(PhoenixPrerenderWeb.Router,
+          private_value: :bots_only
+        )
+
+      paths = Enum.map(routes, & &1.path)
+      assert "/changelog" in paths
+      refute "/about" in paths
+      refute "/status" in paths
+    end
+
+    test "exact match with private_value: :always" do
+      routes =
+        Route.discover(PhoenixPrerenderWeb.Router,
+          private_value: :always
+        )
+
+      paths = Enum.map(routes, & &1.path)
+      assert "/status" in paths
+      refute "/about" in paths
+      refute "/changelog" in paths
+    end
+
+    test "exact match with private_value: true returns only true routes" do
+      routes =
+        Route.discover(PhoenixPrerenderWeb.Router,
+          private_value: true
+        )
+
+      paths = Enum.map(routes, & &1.path)
+      assert "/about" in paths
+      refute "/changelog" in paths
+      refute "/status" in paths
+    end
   end
 
   describe "paths/1" do
