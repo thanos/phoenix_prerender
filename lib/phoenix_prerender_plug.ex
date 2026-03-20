@@ -277,6 +277,7 @@ defmodule PhoenixPrerender.Plug do
 
       if last_seen != nil and last_seen != current do
         PhoenixPrerender.PageCache.clear()
+        :persistent_term.erase({__MODULE__, :manifest})
       end
 
       if last_seen != current do
@@ -292,9 +293,25 @@ defmodule PhoenixPrerender.Plug do
   # -- Strict paths (manifest check) ----------------------------------------
 
   defp manifest_entry(path, output_path) do
+    manifest = cached_manifest(output_path)
+    if manifest, do: PhoenixPrerender.Manifest.lookup(manifest, path), else: nil
+  end
+
+  defp cached_manifest(output_path) do
+    case :persistent_term.get({__MODULE__, :manifest}, :miss) do
+      :miss -> load_and_cache_manifest(output_path)
+      manifest -> manifest
+    end
+  end
+
+  defp load_and_cache_manifest(output_path) do
     case PhoenixPrerender.Manifest.read(output_path) do
-      {:ok, manifest} -> PhoenixPrerender.Manifest.lookup(manifest, path)
-      {:error, _} -> nil
+      {:ok, manifest} ->
+        :persistent_term.put({__MODULE__, :manifest}, manifest)
+        manifest
+
+      {:error, _} ->
+        nil
     end
   end
 

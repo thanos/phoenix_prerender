@@ -9,6 +9,10 @@ defmodule PhoenixPrerender.PlugTest do
     File.rm_rf!(@output_path)
     File.mkdir_p!(@output_path)
 
+    # Clear cached manifest between tests
+    :persistent_term.erase({PrerenderPlug, :manifest})
+    :persistent_term.erase({PrerenderPlug, :generation_stamp})
+
     on_exit(fn -> File.rm_rf!(@output_path) end)
 
     :ok
