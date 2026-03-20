@@ -32,7 +32,8 @@
       <h2 class="text-xl font-semibold text-gray-900">Per-Route Prerender Modes</h2>
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
-      Dead views inside <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code>
+      Dead views inside
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code>
       are prerendered by default and served to everyone. LiveView routes require explicit metadata
       to control how prerendered content is served:
     </p>
@@ -59,11 +60,15 @@ end</code></pre>
           </tr>
           <tr>
             <td class="px-4 py-2 font-mono text-purple-700 text-xs">prerender: :bots_only</td>
-            <td class="px-4 py-2 text-gray-600">Served only to search engine crawlers; browsers get the live app</td>
+            <td class="px-4 py-2 text-gray-600">
+              Served only to search engine crawlers; browsers get the live app
+            </td>
           </tr>
           <tr>
             <td class="px-4 py-2 font-mono text-purple-700 text-xs">prerender: :always</td>
-            <td class="px-4 py-2 text-gray-600">Served to everyone with fresh session/CSRF (requires session_options)</td>
+            <td class="px-4 py-2 text-gray-600">
+              Served to everyone with fresh session/CSRF (requires session_options)
+            </td>
           </tr>
         </tbody>
       </table>
@@ -76,9 +81,12 @@ end</code></pre>
       <h2 class="text-xl font-semibold text-gray-900">Incremental Static Regeneration</h2>
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
-      ISR implements the <strong>stale-while-revalidate</strong> pattern: stale pages are served
+      ISR implements the <strong>stale-while-revalidate</strong>
+      pattern: stale pages are served
       immediately while a background task re-renders and writes fresh HTML. Users never wait.
-      ISR is opt-in per route via <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">isr: true</code> in metadata:
+      ISR is opt-in per route via
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">isr: true</code>
+      in metadata:
     </p>
     <pre class="code-block text-sm"><code>live "/status", StatusLive, :index,
   metadata: %&#123;prerender: :always, isr: true&#125;</code></pre>
@@ -101,7 +109,8 @@ end</code></pre>
       <h2 class="text-xl font-semibold text-gray-900">LiveView CSRF Token Swap</h2>
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
-      For <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: :always</code> routes,
+      For <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: :always</code>
+      routes,
       the plug establishes a fresh session and replaces the stale build-time CSRF token in the
       prerendered HTML before serving. This allows LiveView's WebSocket to connect successfully
       without infinite refresh loops.
@@ -186,9 +195,13 @@ plug PhoenixPrerender.Plug, session_options: @session_options</code></pre>
       your endpoint before the router. The serving order is:
     </p>
     <ol class="space-y-2 text-sm text-gray-600 ml-4">
-      <li><strong>1. Manifest check</strong> &mdash; per-route prerender_mode and ISR settings</li>
+      <li>
+        <strong>1. Manifest check</strong> &mdash; per-route prerender_mode and ISR settings
+      </li>
       <li><strong>2. Bot detection</strong> &mdash; for :bots_only routes, check User-Agent</li>
-      <li><strong>3. CSRF swap</strong> &mdash; for :always routes, inject fresh session + token</li>
+      <li>
+        <strong>3. CSRF swap</strong> &mdash; for :always routes, inject fresh session + token
+      </li>
       <li><strong>4. ETS cache</strong> &mdash; in-memory lookup via PageCache</li>
       <li><strong>5. Disk</strong> &mdash; check for static HTML file</li>
       <li><strong>6. Pass-through</strong> &mdash; fall to Phoenix router</li>
@@ -224,7 +237,10 @@ plug PhoenixPrerender.Plug, session_options: @session_options</code></pre>
         After generation, two files are written:
       </p>
       <ul class="space-y-1 text-sm text-gray-500">
-        <li><strong>manifest.json</strong> &mdash; per-route prerender_mode, ISR flag, checksums, sizes</li>
+        <li>
+          <strong>manifest.json</strong>
+          &mdash; per-route prerender_mode, ISR flag, checksums, sizes
+        </li>
         <li><strong>sitemap.xml</strong> &mdash; standard sitemaps.org format</li>
       </ul>
     </div>

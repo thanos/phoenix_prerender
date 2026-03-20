@@ -67,7 +67,9 @@
         <tr>
           <td class="px-6 py-3 font-mono text-purple-700">bots_only</td>
           <td class="px-6 py-3 text-gray-500">false</td>
-          <td class="px-6 py-3 text-gray-600">Global override: serve all prerendered pages to bots only. Prefer per-route metadata instead.</td>
+          <td class="px-6 py-3 text-gray-600">
+            Global override: serve all prerendered pages to bots only. Prefer per-route metadata instead.
+          </td>
         </tr>
         <tr>
           <td class="px-6 py-3 font-mono text-purple-700">concurrency</td>
@@ -94,8 +96,10 @@
   <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
     <h2 class="text-xl font-semibold text-gray-900 mb-4">Per-Route Metadata</h2>
     <p class="text-gray-600 leading-relaxed mb-4">
-      Inside a <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code> block,
-      dead views get <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: true</code>
+      Inside a <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code>
+      block,
+      dead views get
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: true</code>
       injected automatically. LiveView routes pass through unchanged &mdash; use explicit metadata
       to control prerendering:
     </p>
@@ -109,20 +113,34 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
           <tr>
-            <td class="px-4 py-2 font-mono text-purple-700 text-xs">%&#123;prerender: true&#125;</td>
-            <td class="px-4 py-2 text-gray-600">Served to all clients (default for dead views in prerender block)</td>
+            <td class="px-4 py-2 font-mono text-purple-700 text-xs">
+              %&#123;prerender: true&#125;
+            </td>
+            <td class="px-4 py-2 text-gray-600">
+              Served to all clients (default for dead views in prerender block)
+            </td>
           </tr>
           <tr>
-            <td class="px-4 py-2 font-mono text-purple-700 text-xs">%&#123;prerender: :bots_only&#125;</td>
-            <td class="px-4 py-2 text-gray-600">Prerendered HTML served to search engine crawlers only; browsers get the live app</td>
+            <td class="px-4 py-2 font-mono text-purple-700 text-xs">
+              %&#123;prerender: :bots_only&#125;
+            </td>
+            <td class="px-4 py-2 text-gray-600">
+              Prerendered HTML served to search engine crawlers only; browsers get the live app
+            </td>
           </tr>
           <tr>
-            <td class="px-4 py-2 font-mono text-purple-700 text-xs">%&#123;prerender: :always&#125;</td>
-            <td class="px-4 py-2 text-gray-600">Served to everyone with a fresh session and CSRF token (requires session_options)</td>
+            <td class="px-4 py-2 font-mono text-purple-700 text-xs">
+              %&#123;prerender: :always&#125;
+            </td>
+            <td class="px-4 py-2 text-gray-600">
+              Served to everyone with a fresh session and CSRF token (requires session_options)
+            </td>
           </tr>
           <tr>
             <td class="px-4 py-2 font-mono text-purple-700 text-xs">%&#123;isr: true&#125;</td>
-            <td class="px-4 py-2 text-gray-600">Enable per-route ISR; triggers background regeneration when stale</td>
+            <td class="px-4 py-2 text-gray-600">
+              Enable per-route ISR; triggers background regeneration when stale
+            </td>
           </tr>
         </tbody>
       </table>
@@ -254,10 +272,12 @@ def render(assigns) do
   """
 end</code></pre>
     <p class="text-sm text-gray-500 mt-4">
-      Attributes: <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">id</code> (required),
-      <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">tag</code> (default: "span"),
-      <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">class</code> (optional).
-      See the <a href="/status" class="text-amber-600 hover:text-amber-800 underline">/status</a> page for a live demo.
+      Attributes: <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">id</code>
+      (required), <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">tag</code>
+      (default: "span"), <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">class</code>
+      (optional).
+      See the <a href="/status" class="text-amber-600 hover:text-amber-800 underline">/status</a>
+      page for a live demo.
     </p>
   </div>
 </div>

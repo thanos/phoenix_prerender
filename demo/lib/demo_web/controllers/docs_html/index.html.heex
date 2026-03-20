@@ -47,7 +47,8 @@
     <p class="text-gray-600 leading-relaxed mb-4">
       All documentation pages are prerendered using a scoped route block. Dead views inside
       <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code>
-      automatically get <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: true</code>
+      automatically get
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: true</code>
       injected. LiveView routes pass through unchanged and require explicit metadata.
     </p>
     <pre class="code-block text-sm"><code># Scoped prerendered routes (dead views)
@@ -84,7 +85,8 @@ end</code></pre>
   <div class="bg-white rounded-xl border border-gray-200 p-8">
     <h2 class="text-xl font-semibold text-gray-900 mb-4">Manifest-Driven Serving</h2>
     <p class="text-gray-600 leading-relaxed mb-4">
-      After generation, each page's <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender_mode</code>
+      After generation, each page's
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender_mode</code>
       and <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">isr</code>
       flag are written to <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">manifest.json</code>.
       At serve time, the plug reads these values to decide per-route behavior:
@@ -92,7 +94,9 @@ end</code></pre>
     <ul class="space-y-2 text-sm text-gray-600 ml-4">
       <li><strong>prerender_mode: "true"</strong> &mdash; serve to all clients</li>
       <li><strong>prerender_mode: "bots_only"</strong> &mdash; serve only to crawlers</li>
-      <li><strong>prerender_mode: "always"</strong> &mdash; serve to all with fresh CSRF token</li>
+      <li>
+        <strong>prerender_mode: "always"</strong> &mdash; serve to all with fresh CSRF token
+      </li>
       <li><strong>isr: true</strong> &mdash; trigger background regeneration when stale</li>
     </ul>
   </div>

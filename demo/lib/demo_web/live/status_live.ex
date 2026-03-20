@@ -159,18 +159,17 @@ defmodule DemoWeb.StatusLive do
         <h3 class="text-lg font-semibold text-gray-900 mb-3">This Route's Configuration</h3>
         <pre class="code-block text-sm"><code># router.ex &mdash; ISR is opt-in per route
           prerender do
-  live "/status", StatusLive, :index,
+    live "/status", StatusLive, :index,
     metadata: %&#123;prerender: :always, isr: true&#125;
-end
+    end
 
-# config/prod.exs
-config :phoenix_prerender,
-  enabled: true,
-  revalidate: 300  # seconds before stale</code></pre>
+    # config/prod.exs
+    config :phoenix_prerender,
+    enabled: true,
+    revalidate: 300  # seconds before stale</code></pre>
         <p class="text-xs text-gray-400 mt-3">
           The <code class="bg-gray-100 px-1 py-0.5 rounded">&lt;.prerendered&gt;</code>
-          component freezes the "Page Generated At" timestamp via
-          <code class="bg-gray-100 px-1 py-0.5 rounded">phx-update="ignore"</code>.
+          component freezes the "Page Generated At" timestamp via <code class="bg-gray-100 px-1 py-0.5 rounded">phx-update="ignore"</code>.
         </p>
       </div>
     </div>
