@@ -182,7 +182,7 @@ defmodule PhoenixPrerender.Plug do
   defp strict_paths?(%{strict_paths: nil}), do: PhoenixPrerender.strict_paths()
   defp strict_paths?(%{strict_paths: value}), do: value
 
-  defp bots_only?(%{bots_only: nil}), do: PhoenixPrerender.bots_only()
+  defp bots_only?(%{bots_only: nil}), do: Application.get_env(:phoenix_prerender, :bots_only, false)
   defp bots_only?(%{bots_only: value}), do: value
 
   defp serve_to_client?(conn, opts, entry) do
@@ -481,9 +481,12 @@ defmodule PhoenixPrerender.Plug do
     |> Plug.Conn.halt()
   end
 
-  defp isr_enabled? do
-    PhoenixPrerender.Regenerator.isr_enabled?()
-  end
+  # Per-route ISR: check manifest entry first, fall back to global config.
+  # Manifest entries have "isr" => true/false.
+  # :no_manifest means strict_paths is off — fall back to global.
+  defp isr_for_route?(%{"isr" => true}), do: true
+  defp isr_for_route?(%{"isr" => _}), do: false
+  defp isr_for_route?(_), do: PhoenixPrerender.Regenerator.isr_enabled?()
 
   # -- Encoding negotiation ---------------------------------------------------
 
