@@ -397,13 +397,39 @@ defmodule PhoenixPrerender.Plug do
 
   # sobelow_skip ["Traversal.SendFile"]
   defp send_prerendered_file(conn, file_path, path, cache_control) do
+    case negotiate_encoding(conn, file_path) do
+      :not_acceptable ->
+        conn
+        |> append_vary("accept-encoding")
+        |> Plug.Conn.send_resp(406, "Not Acceptable")
+        |> Plug.Conn.halt()
+
+      {actual_file, encoding} ->
+        do_send_prerendered_file(conn, actual_file, encoding, path, cache_control)
+    end
+  end
+
+  # sobelow_skip ["Traversal.SendFile"]
+  defp do_send_prerendered_file(conn, actual_file, encoding, path, cache_control) do
     start_time = System.monotonic_time()
 
+    conn =
+      conn
+      |> Plug.Conn.put_resp_content_type("text/html")
+      |> Plug.Conn.put_resp_header("cache-control", cache_control)
+      |> Plug.Conn.put_resp_header("x-prerendered", "true")
+
+    conn = append_vary(conn, "accept-encoding")
+
+    conn =
+      if encoding do
+        Plug.Conn.put_resp_header(conn, "content-encoding", encoding)
+      else
+        conn
+      end
+
     conn
-    |> Plug.Conn.put_resp_content_type("text/html")
-    |> Plug.Conn.put_resp_header("cache-control", cache_control)
-    |> Plug.Conn.put_resp_header("x-prerendered", "true")
-    |> Plug.Conn.send_file(200, file_path)
+    |> Plug.Conn.send_file(200, actual_file)
     |> tap(fn _ ->
       duration = System.monotonic_time() - start_time
 
@@ -437,10 +463,143 @@ defmodule PhoenixPrerender.Plug do
     |> Plug.Conn.halt()
   end
 
-  # Per-route ISR: check manifest entry first, fall back to global config.
-  # Manifest entries have "isr" => true/false.
-  # :no_manifest means strict_paths is off — fall back to global.
-  defp isr_for_route?(%{"isr" => true}), do: true
-  defp isr_for_route?(%{"isr" => _}), do: false
-  defp isr_for_route?(_), do: PhoenixPrerender.Regenerator.isr_enabled?()
+  defp isr_enabled? do
+    PhoenixPrerender.Regenerator.isr_enabled?()
+  end
+
+  # -- Encoding negotiation ---------------------------------------------------
+
+  # Preference order: brotli first, then gzip.
+  @encoding_candidates [
+    {"br", ".br"},
+    {"gzip", ".gz"}
+  ]
+
+  defp negotiate_encoding(conn, file_path) do
+    accepted = parse_accept_encoding(conn)
+
+    case Enum.find_value(@encoding_candidates, nil, fn {encoding, ext} ->
+           find_compressed_variant(encoding, file_path <> ext, accepted)
+         end) do
+      {_path, _encoding} = match ->
+        match
+
+      nil ->
+        if identity_rejected?(accepted) do
+          :not_acceptable
+        else
+          {file_path, nil}
+        end
+    end
+  end
+
+  defp find_compressed_variant(encoding, compressed_path, accepted) do
+    if encoding_accepted?(encoding, accepted) and File.exists?(compressed_path) do
+      {compressed_path, encoding}
+    end
+  end
+
+  defp encoding_accepted?(encoding, accepted) do
+    case Map.fetch(accepted, encoding) do
+      {:ok, q} when q > 0 -> true
+      _ -> wildcard_accepted?(encoding, accepted)
+    end
+  end
+
+  defp wildcard_accepted?(encoding, accepted) do
+    case Map.fetch(accepted, "*") do
+      {:ok, q} when q > 0 -> not Map.has_key?(accepted, encoding)
+      _ -> false
+    end
+  end
+
+  # Returns true when the client has explicitly rejected uncompressed responses.
+  # This happens when identity;q=0 is sent, or *;q=0 is sent without an
+  # explicit identity entry with q > 0.
+  defp identity_rejected?(accepted) when map_size(accepted) == 0, do: false
+
+  defp identity_rejected?(accepted) do
+    case Map.fetch(accepted, "identity") do
+      {:ok, q} -> q == 0.0
+      :error -> wildcard_rejects_identity?(accepted)
+    end
+  end
+
+  defp wildcard_rejects_identity?(accepted) do
+    case Map.fetch(accepted, "*") do
+      {:ok, q} -> q == 0.0
+      :error -> false
+    end
+  end
+
+  defp parse_accept_encoding(conn) do
+    conn
+    |> Plug.Conn.get_req_header("accept-encoding")
+    |> Enum.flat_map(&String.split(&1, ","))
+    |> Enum.reduce(%{}, fn part, acc ->
+      case parse_encoding_part(part) do
+        :skip -> acc
+        {encoding, q} -> Map.update(acc, encoding, q, &max(&1, q))
+      end
+    end)
+  end
+
+  defp parse_encoding_part(part) do
+    case String.split(part, ";") do
+      [token] ->
+        encoding = token |> String.trim() |> String.downcase()
+        if encoding == "", do: :skip, else: {encoding, 1.0}
+
+      [token | params] ->
+        encoding = token |> String.trim() |> String.downcase()
+
+        if encoding == "" do
+          :skip
+        else
+          {encoding, extract_q_value(params)}
+        end
+    end
+  end
+
+  defp extract_q_value(params) do
+    Enum.find_value(params, 1.0, fn param ->
+      param = String.trim(param)
+
+      case String.split(param, "=", parts: 2) do
+        ["q", value] -> parse_q(value)
+        _ -> nil
+      end
+    end)
+  end
+
+  defp parse_q(value) do
+    case Float.parse(String.trim(value)) do
+      {q, _} when q >= 0.0 and q <= 1.0 -> q
+      _ -> 1.0
+    end
+  end
+
+  # Appends a token to the Vary header, preserving any existing values
+  # and deduplicating so the same token is not listed twice.
+  defp append_vary(conn, token) do
+    existing = Plug.Conn.get_resp_header(conn, "vary")
+
+    tokens =
+      existing
+      |> Enum.flat_map(&String.split(&1, ","))
+      |> Enum.map(&String.trim/1)
+      |> Enum.map(&String.downcase/1)
+
+    if token in tokens do
+      conn
+    else
+      value =
+        case existing do
+          [] -> token
+          _ -> Enum.join(existing, ", ") <> ", " <> token
+        end
+
+      Plug.Conn.put_resp_header(conn, "vary", value)
+    end
+  end
 end

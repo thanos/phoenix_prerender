@@ -257,223 +257,218 @@ defmodule PhoenixPrerender.PlugTest do
     end
   end
 
-  describe "per-route ISR from manifest" do
-    setup do
-      start_supervised!(PhoenixPrerender.PageCache)
-      start_supervised!({PhoenixPrerender.Regenerator, endpoint: PhoenixPrerenderWeb.Endpoint})
-
-      original_isr = Application.get_env(:phoenix_prerender, :isr)
-      original_revalidate = Application.get_env(:phoenix_prerender, :revalidate)
-
-      # Global ISR is OFF — only per-route ISR should trigger
-      Application.put_env(:phoenix_prerender, :isr, false)
-      Application.put_env(:phoenix_prerender, :revalidate, 0)
-
-      on_exit(fn ->
-        if original_isr,
-          do: Application.put_env(:phoenix_prerender, :isr, original_isr),
-          else: Application.delete_env(:phoenix_prerender, :isr)
-
-        if original_revalidate,
-          do: Application.put_env(:phoenix_prerender, :revalidate, original_revalidate),
-          else: Application.delete_env(:phoenix_prerender, :revalidate)
-
-        PhoenixPrerender.PageCache.clear()
-      end)
-
-      :ok
-    end
-
-    test "triggers ISR for route with isr: true in manifest" do
-      write_prerendered("/status", "<html>Stale Status</html>")
-
-      write_manifest([
-        %{
-          path: "/status",
-          file: "status/index.html",
-          size: 25,
-          checksum: "abc",
-          generated_at: "2024-01-01T00:00:00Z",
-          prerender_mode: :always,
-          isr: true
-        }
-      ])
-
-      file_path = PhoenixPrerender.Path.full_output_path("/status", @output_path, :dir_index)
-      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
-
-      conn =
-        build_conn(:get, "/status")
-        |> call_plug(strict_paths: true, endpoint: PhoenixPrerenderWeb.Endpoint)
-
-      assert conn.halted
-      assert conn.status == 200
-
-      Process.sleep(100)
-    end
-
-    test "does not trigger ISR for route with isr: false in manifest" do
-      write_prerendered("/about", "<html>About</html>")
-
-      write_manifest([
-        %{
-          path: "/about",
-          file: "about/index.html",
-          size: 20,
-          checksum: "abc",
-          generated_at: "2024-01-01T00:00:00Z",
-          prerender_mode: true,
-          isr: false
-        }
-      ])
-
-      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
-      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
-
-      conn =
-        build_conn(:get, "/about")
-        |> call_plug(strict_paths: true, endpoint: PhoenixPrerenderWeb.Endpoint)
-
-      # Page is served but no ISR triggered (global ISR is off, route ISR is off)
-      assert conn.halted
-      assert conn.status == 200
-    end
-
-    test "falls back to global ISR when no manifest (strict_paths: false)" do
-      Application.put_env(:phoenix_prerender, :isr, true)
-
+  describe "Accept-Encoding negotiation" do
+    test "serves compressed file when Accept-Encoding: gzip and .gz file exists" do
       write_prerendered("/about", "<html>About</html>")
       file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
-      File.touch!(file_path, {{2020, 1, 1}, {0, 0, 0}})
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
 
       conn =
         build_conn(:get, "/about")
-        |> call_plug(strict_paths: false, endpoint: PhoenixPrerenderWeb.Endpoint)
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip, deflate")
+        |> call_plug()
 
       assert conn.halted
       assert conn.status == 200
-
-      Process.sleep(100)
-    end
-  end
-
-  describe "always route CSRF swap" do
-    @session_options [
-      store: :cookie,
-      key: "_test_key",
-      signing_salt: "test_salt"
-    ]
-
-    @secret_key_base "7gxSatdPcoYif01OEVvjugvVp/Bzb855PHi7onXPBngutD03s24S7y0iP5yJwTzg"
-
-    @stale_html ~s(<html><head><meta name="csrf-token" content="STALE_TOKEN_FROM_BUILD"/></head><body>Status</body></html>)
-
-    defp build_conn_with_secret(method, path) do
-      build_conn(method, path)
-      |> Map.put(:secret_key_base, @secret_key_base)
+      assert get_resp_header(conn, "content-encoding") == ["gzip"]
+      assert get_resp_header(conn, "vary") == ["accept-encoding"]
     end
 
-    test "replaces stale CSRF token with fresh one for :always route" do
-      write_prerendered("/status", @stale_html)
-
-      write_manifest([
-        %{
-          path: "/status",
-          file: "status/index.html",
-          size: 100,
-          checksum: "abc",
-          generated_at: "2024-01-01T00:00:00Z",
-          prerender_mode: :always
-        }
-      ])
-
-      conn =
-        build_conn_with_secret(:get, "/status")
-        |> call_plug(strict_paths: true, session_options: @session_options)
-
-      assert conn.halted
-      assert conn.status == 200
-      # The stale token must be gone
-      refute conn.resp_body =~ "STALE_TOKEN_FROM_BUILD"
-      # A fresh CSRF token must be present
-      assert conn.resp_body =~ ~r/<meta name="csrf-token" content="[^"]+"/
-    end
-
-    test "sets session cookie for :always route" do
-      write_prerendered("/status", @stale_html)
-
-      write_manifest([
-        %{
-          path: "/status",
-          file: "status/index.html",
-          size: 100,
-          checksum: "abc",
-          generated_at: "2024-01-01T00:00:00Z",
-          prerender_mode: :always
-        }
-      ])
-
-      conn =
-        build_conn_with_secret(:get, "/status")
-        |> call_plug(strict_paths: true, session_options: @session_options)
-
-      assert conn.halted
-      # Session cookie should be set in the response
-      set_cookie =
-        conn.resp_headers
-        |> Enum.filter(fn {k, _} -> k == "set-cookie" end)
-        |> Enum.map(fn {_, v} -> v end)
-
-      assert Enum.any?(set_cookie, &String.starts_with?(&1, "_test_key="))
-    end
-
-    test "does not swap CSRF for :always route when session_options not configured" do
-      write_prerendered("/status", @stale_html)
-
-      write_manifest([
-        %{
-          path: "/status",
-          file: "status/index.html",
-          size: 100,
-          checksum: "abc",
-          generated_at: "2024-01-01T00:00:00Z",
-          prerender_mode: :always
-        }
-      ])
-
-      # No session_options passed — falls through to normal serving
-      conn =
-        build_conn(:get, "/status")
-        |> call_plug(strict_paths: true)
-
-      assert conn.halted
-      assert conn.status == 200
-      # Stale token is served as-is (no swap possible)
-      assert conn.resp_body =~ "STALE_TOKEN_FROM_BUILD"
-    end
-
-    test "does not swap CSRF for non-always routes" do
-      stale_html = ~s(<html><head><meta name="csrf-token" content="STALE"/></head><body>About</body></html>)
-      write_prerendered("/about", stale_html)
-
-      write_manifest([
-        %{
-          path: "/about",
-          file: "about/index.html",
-          size: 80,
-          checksum: "abc",
-          generated_at: "2024-01-01T00:00:00Z",
-          prerender_mode: true
-        }
-      ])
+    test "serves compressed file when Accept-Encoding: br and .br file exists" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".br", "fake-brotli-content")
 
       conn =
         build_conn(:get, "/about")
-        |> call_plug(strict_paths: true, session_options: @session_options)
+        |> Plug.Conn.put_req_header("accept-encoding", "br, gzip")
+        |> call_plug()
 
       assert conn.halted
-      # Non-always route: served as-is, no CSRF swap
-      assert conn.resp_body =~ "STALE"
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == ["br"]
+      assert get_resp_header(conn, "vary") == ["accept-encoding"]
+    end
+
+    test "prefers br over gzip when both available" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+      File.write!(file_path <> ".br", "fake-brotli-content")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip, br")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "content-encoding") == ["br"]
+    end
+
+    test "serves uncompressed when no compressed file exists" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == []
+      assert get_resp_header(conn, "vary") == ["accept-encoding"]
+    end
+
+    test "always sets vary header even without Accept-Encoding" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == []
+      assert get_resp_header(conn, "vary") == ["accept-encoding"]
+    end
+
+    test "rejects encoding with q=0" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip;q=0")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "content-encoding") == []
+    end
+
+    test "handles case-insensitive encoding tokens" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "GZIP")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "content-encoding") == ["gzip"]
+    end
+
+    test "handles wildcard * encoding" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".br", "fake-brotli-content")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "*")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "content-encoding") == ["br"]
+    end
+
+    test "wildcard does not override explicit q=0" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".br", "fake-brotli-content")
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "br;q=0, *")
+        |> call_plug()
+
+      assert conn.halted
+      # br is explicitly rejected, wildcard covers gzip
+      assert get_resp_header(conn, "content-encoding") == ["gzip"]
+    end
+
+    test "preserves existing vary header values" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_resp_header("vary", "cookie")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "vary") == ["cookie, accept-encoding"]
+    end
+
+    test "does not duplicate accept-encoding in vary header" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_resp_header("vary", "Accept-Encoding")
+        |> call_plug()
+
+      assert conn.halted
+      assert get_resp_header(conn, "vary") == ["Accept-Encoding"]
+    end
+
+    test "respects q-value ordering" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+      File.write!(file_path <> ".br", "fake-brotli-content")
+
+      # Client prefers gzip with higher q, but our preference is br > gzip
+      # Our code checks br first (server preference), but br has q=0.5 which is still > 0
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip;q=1.0, br;q=0.5")
+        |> call_plug()
+
+      assert conn.halted
+      # Server preference order wins (br first) since both are accepted (q > 0)
+      assert get_resp_header(conn, "content-encoding") == ["br"]
+    end
+
+    test "returns 406 when identity is explicitly rejected and no compressed variant exists" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "identity;q=0")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 406
+    end
+
+    test "returns 406 when wildcard q=0 rejects all encodings" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "*;q=0")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 406
+    end
+
+    test "serves compressed when identity rejected but compressed variant exists" do
+      write_prerendered("/about", "<html>About</html>")
+      file_path = PhoenixPrerender.Path.full_output_path("/about", @output_path, :dir_index)
+      File.write!(file_path <> ".gz", :zlib.gzip("<html>About</html>"))
+
+      conn =
+        build_conn(:get, "/about")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip, identity;q=0")
+        |> call_plug()
+
+      assert conn.halted
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-encoding") == ["gzip"]
     end
   end
 

@@ -71,7 +71,13 @@ defmodule PhoenixPrerender do
         bots_only: false,
 
         # PubSub server for distributed cache invalidation
-        pubsub: nil
+        pubsub: nil,
+
+        # List of compressor modules for pre-compression (default: [])
+        compressors: [],
+
+        # Prewarm the ETS cache from manifest on boot (default: false)
+        prewarm: false
 
   ## Marking Routes
 
@@ -340,25 +346,51 @@ defmodule PhoenixPrerender do
   end
 
   @doc """
-  Returns whether prerendered pages should only be served to crawlers.
+  Returns the list of configured compressor modules.
 
-  When `true`, `PhoenixPrerender.Plug` checks the `User-Agent` header
-  and only serves prerendered content to known search engine bots.
-  Regular browsers are passed through to the live Phoenix pipeline.
+  Defaults to `[]` (no pre-compression). See `PhoenixPrerender.Compressor`
+  for details on configuring compressors.
 
-  This is essential for LiveView routes where the prerendered HTML
-  contains stale CSRF tokens and session data that would break
-  LiveView's WebSocket connection.
+  ## Examples
 
+      iex> PhoenixPrerender.compressors()
+      []
+  """
+  @spec compressors() :: [module()]
+  def compressors do
+    Application.get_env(:phoenix_prerender, :compressors, [])
+  end
+
+  @doc """
+  Returns whether cache prewarming is enabled.
+
+  When `true`, `PhoenixPrerender.PageCache` loads all pages from the
+  manifest into ETS on boot, eliminating first-request disk reads.
   Defaults to `false`.
 
   ## Examples
 
-      iex> PhoenixPrerender.bots_only()
+      iex> PhoenixPrerender.prewarm?()
       false
   """
-  @spec bots_only() :: boolean()
-  def bots_only do
-    Application.get_env(:phoenix_prerender, :bots_only, false)
+  @spec prewarm?() :: boolean()
+  def prewarm? do
+    Application.get_env(:phoenix_prerender, :prewarm, false)
   end
+
+  @doc """
+  Resolves an asset path to its digested counterpart via the endpoint.
+
+  Delegates to `PhoenixPrerender.StaticAsset.static_path/2`. See that
+  module for full documentation.
+
+  ## Examples
+
+      PhoenixPrerender.static_asset_path(MyAppWeb.Endpoint, "/assets/app.css")
+      #=> "/assets/app-ABC123.css"
+  """
+  @spec static_asset_path(module(), String.t()) :: String.t()
+  defdelegate static_asset_path(endpoint, path),
+    to: PhoenixPrerender.StaticAsset,
+    as: :static_path
 end

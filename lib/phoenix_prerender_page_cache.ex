@@ -62,6 +62,11 @@ defmodule PhoenixPrerender.PageCache do
   ## Options
 
     * `:name` -- the process name (default: `PhoenixPrerender.PageCache`)
+    * `:prewarm` -- whether to load pages from the manifest into cache on
+      boot (default: from `PhoenixPrerender.prewarm?/0`, which defaults
+      to `false`)
+    * `:output_path` -- directory containing prerendered files, used for
+      prewarming (default: from `PhoenixPrerender.output_path/0`)
 
   ## Examples
 
@@ -69,6 +74,9 @@ defmodule PhoenixPrerender.PageCache do
 
       # With a custom name
       {:ok, pid} = PhoenixPrerender.PageCache.start_link(name: :my_cache)
+
+      # With prewarming enabled
+      {:ok, pid} = PhoenixPrerender.PageCache.start_link(prewarm: true)
   """
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
@@ -95,9 +103,146 @@ defmodule PhoenixPrerender.PageCache do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     table = :ets.new(@table, [:set, :public, :named_table, read_concurrency: true])
-    {:ok, %{table: table}}
+    prewarm = Keyword.get(opts, :prewarm, PhoenixPrerender.prewarm?())
+    output_path = Keyword.get(opts, :output_path, PhoenixPrerender.output_path())
+    state = %{table: table, output_path: output_path}
+
+    if prewarm do
+      {:ok, state, {:continue, :prewarm}}
+    else
+      {:ok, state}
+    end
+  end
+
+  @impl true
+  def handle_continue(:prewarm, state) do
+    start_time = System.monotonic_time()
+    count = do_prewarm(state.output_path)
+    duration = System.monotonic_time() - start_time
+
+    :telemetry.execute(
+      [:phoenix_prerender, :prewarm],
+      %{duration: duration, count: count},
+      %{output_path: state.output_path}
+    )
+
+    require Logger
+
+    Logger.info("PhoenixPrerender: Prewarmed #{count} pages into cache")
+
+    {:noreply, state}
+  end
+
+  defp do_prewarm(output_path) do
+    case PhoenixPrerender.Manifest.read(output_path) do
+      {:ok, manifest} ->
+        pages = manifest["pages"] || []
+
+        safe_prefix =
+          case resolve_real_path(output_path) do
+            {:ok, real} -> real
+            {:error, _} -> Path.expand(output_path)
+          end
+
+        Enum.reduce(pages, 0, fn page, count -> prewarm_page(page, count, safe_prefix) end)
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("PhoenixPrerender: Prewarm failed to read manifest: #{inspect(reason)}")
+        0
+    end
+  end
+
+  defp prewarm_page(%{"route" => route, "file" => file}, count, safe_prefix)
+       when is_binary(route) and is_binary(file) do
+    case resolve_real_path(file) do
+      {:ok, real_path} ->
+        if path_contained?(real_path, safe_prefix) do
+          read_and_cache(route, real_path, count)
+        else
+          require Logger
+
+          Logger.warning(
+            "PhoenixPrerender: Prewarm skipped #{route}: path outside output directory"
+          )
+
+          count
+        end
+
+      {:error, _} ->
+        # File doesn't exist — fall back to expanded path check for a useful warning
+        require Logger
+        Logger.warning("PhoenixPrerender: Prewarm skipped #{route}: file not found")
+        count
+    end
+  end
+
+  defp prewarm_page(page, count, _safe_prefix) do
+    require Logger
+    Logger.warning("PhoenixPrerender: Prewarm skipped malformed entry: #{inspect(page)}")
+    count
+  end
+
+  defp path_contained?(child, parent) do
+    case Path.relative_to(child, parent) do
+      ^child -> false
+      relative -> not String.starts_with?(relative, "..")
+    end
+  end
+
+  # Resolves a path to its real location on disk, recursively following
+  # symlink chains. Uses :file.read_link/1 in a loop (bounded to 40 hops
+  # to match typical OS limits) until a non-symlink is reached, then
+  # verifies the final target exists via File.stat/1.
+  defp resolve_real_path(path) do
+    resolve_real_path(Path.expand(path), 40)
+  end
+
+  defp resolve_real_path(_path, 0), do: {:error, :eloop}
+
+  defp resolve_real_path(path, hops_remaining) do
+    case :file.read_link(String.to_charlist(path)) do
+      {:ok, target} ->
+        resolved = resolve_symlink_target(target, path)
+        resolve_real_path(resolved, hops_remaining - 1)
+
+      {:error, :einval} ->
+        # Not a symlink — verify it exists
+        case File.stat(path) do
+          {:ok, _} -> {:ok, path}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp resolve_symlink_target(target, link_path) do
+    target_str = List.to_string(target)
+
+    if Path.type(target_str) == :absolute do
+      target_str
+    else
+      Path.join(Path.dirname(link_path), target_str)
+    end
+    |> Path.expand()
+  end
+
+  # sobelow_skip ["Traversal.FileModule"]
+  defp read_and_cache(route, file, count) do
+    case File.read(file) do
+      {:ok, html} ->
+        put(route, html, %{prewarmed: true})
+        count + 1
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("PhoenixPrerender: Prewarm skipped #{route}: #{inspect(reason)}")
+        count
+    end
   end
 
   @doc """

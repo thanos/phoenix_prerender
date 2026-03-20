@@ -102,6 +102,115 @@ defmodule PhoenixPrerender.GeneratorTest do
     end
   end
 
+  describe "generate/1 with compressors" do
+    setup do
+      original = Application.get_env(:phoenix_prerender, :compressors)
+      Application.put_env(:phoenix_prerender, :compressors, [PhoenixPrerender.Compressor.Gzip])
+
+      on_exit(fn ->
+        if original do
+          Application.put_env(:phoenix_prerender, :compressors, original)
+        else
+          Application.delete_env(:phoenix_prerender, :compressors)
+        end
+      end)
+
+      :ok
+    end
+
+    test "generates .gz files alongside .html when compressors configured" do
+      {:ok, results} =
+        Generator.generate(
+          router: PhoenixPrerenderWeb.Router,
+          endpoint: PhoenixPrerenderWeb.Endpoint,
+          output_path: @output_path,
+          url_style: :dir_index,
+          paths: ["/about"]
+        )
+
+      [result] = Enum.filter(results, &(&1.status == :ok))
+
+      assert [%{extension: ".gz", size: size}] = result.compressed
+      assert is_integer(size) and size > 0
+
+      html_path = Path.join(@output_path, "about/index.html")
+      gz_path = html_path <> ".gz"
+      assert File.exists?(html_path)
+      assert File.exists?(gz_path)
+
+      # Verify round-trip
+      original = File.read!(html_path)
+      compressed = File.read!(gz_path)
+      assert :zlib.gunzip(compressed) == original
+    end
+
+    test "result does not include :compressed key when no compressors configured" do
+      Application.put_env(:phoenix_prerender, :compressors, [])
+
+      {:ok, results} =
+        Generator.generate(
+          router: PhoenixPrerenderWeb.Router,
+          endpoint: PhoenixPrerenderWeb.Endpoint,
+          output_path: @output_path,
+          paths: ["/about"]
+        )
+
+      [result] = Enum.filter(results, &(&1.status == :ok))
+      refute Map.has_key?(result, :compressed)
+    end
+  end
+
+  describe "write_compressed_variants!/2" do
+    setup do
+      original = Application.get_env(:phoenix_prerender, :compressors)
+
+      on_exit(fn ->
+        if original do
+          Application.put_env(:phoenix_prerender, :compressors, original)
+        else
+          Application.delete_env(:phoenix_prerender, :compressors)
+        end
+      end)
+
+      :ok
+    end
+
+    test "writes compressed files alongside the original" do
+      Application.put_env(:phoenix_prerender, :compressors, [PhoenixPrerender.Compressor.Gzip])
+      path = Path.join(@output_path, "test/compressed.html")
+      content = "<html>test</html>"
+      Generator.write_atomic!(path, content)
+      results = Generator.write_compressed_variants!(path, content)
+
+      assert [%{extension: ".gz", size: _}] = results
+      assert File.exists?(path <> ".gz")
+      assert :zlib.gunzip(File.read!(path <> ".gz")) == content
+    end
+
+    test "returns empty list when no compressors configured" do
+      Application.put_env(:phoenix_prerender, :compressors, [])
+      path = Path.join(@output_path, "test/no_compress.html")
+      Generator.write_atomic!(path, "<html>test</html>")
+
+      assert [] = Generator.write_compressed_variants!(path, "<html>test</html>")
+    end
+
+    test "rejects compressor extensions containing path traversal" do
+      defmodule TraversalCompressor do
+        @behaviour PhoenixPrerender.Compressor
+        def compress(content), do: {:ok, content}
+        def extension, do: "/../evil"
+      end
+
+      Application.put_env(:phoenix_prerender, :compressors, [TraversalCompressor])
+      path = Path.join(@output_path, "test/safe.html")
+      Generator.write_atomic!(path, "<html>test</html>")
+
+      assert [] = Generator.write_compressed_variants!(path, "<html>test</html>")
+      refute File.exists?(path <> "/../evil")
+    end
+  end
+
   describe "write_atomic!/2" do
     test "writes file atomically" do
       path = Path.join(@output_path, "test/atomic.html")
