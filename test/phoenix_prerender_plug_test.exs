@@ -357,6 +357,126 @@ defmodule PhoenixPrerender.PlugTest do
     end
   end
 
+  describe "always route CSRF swap" do
+    @session_options [
+      store: :cookie,
+      key: "_test_key",
+      signing_salt: "test_salt"
+    ]
+
+    @secret_key_base "7gxSatdPcoYif01OEVvjugvVp/Bzb855PHi7onXPBngutD03s24S7y0iP5yJwTzg"
+
+    @stale_html ~s(<html><head><meta name="csrf-token" content="STALE_TOKEN_FROM_BUILD"/></head><body>Status</body></html>)
+
+    defp build_conn_with_secret(method, path) do
+      build_conn(method, path)
+      |> Map.put(:secret_key_base, @secret_key_base)
+    end
+
+    test "replaces stale CSRF token with fresh one for :always route" do
+      write_prerendered("/status", @stale_html)
+
+      write_manifest([
+        %{
+          path: "/status",
+          file: "status/index.html",
+          size: 100,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      conn =
+        build_conn_with_secret(:get, "/status")
+        |> call_plug(strict_paths: true, session_options: @session_options)
+
+      assert conn.halted
+      assert conn.status == 200
+      # The stale token must be gone
+      refute conn.resp_body =~ "STALE_TOKEN_FROM_BUILD"
+      # A fresh CSRF token must be present
+      assert conn.resp_body =~ ~r/<meta name="csrf-token" content="[^"]+"/
+    end
+
+    test "sets session cookie for :always route" do
+      write_prerendered("/status", @stale_html)
+
+      write_manifest([
+        %{
+          path: "/status",
+          file: "status/index.html",
+          size: 100,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      conn =
+        build_conn_with_secret(:get, "/status")
+        |> call_plug(strict_paths: true, session_options: @session_options)
+
+      assert conn.halted
+      # Session cookie should be set in the response
+      set_cookie =
+        conn.resp_headers
+        |> Enum.filter(fn {k, _} -> k == "set-cookie" end)
+        |> Enum.map(fn {_, v} -> v end)
+
+      assert Enum.any?(set_cookie, &String.starts_with?(&1, "_test_key="))
+    end
+
+    test "does not swap CSRF for :always route when session_options not configured" do
+      write_prerendered("/status", @stale_html)
+
+      write_manifest([
+        %{
+          path: "/status",
+          file: "status/index.html",
+          size: 100,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      # No session_options passed — falls through to normal serving
+      conn =
+        build_conn(:get, "/status")
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+      # Stale token is served as-is (no swap possible)
+      assert conn.resp_body =~ "STALE_TOKEN_FROM_BUILD"
+    end
+
+    test "does not swap CSRF for non-always routes" do
+      stale_html = ~s(<html><head><meta name="csrf-token" content="STALE"/></head><body>About</body></html>)
+      write_prerendered("/about", stale_html)
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 80,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: true
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(strict_paths: true, session_options: @session_options)
+
+      assert conn.halted
+      # Non-always route: served as-is, no CSRF swap
+      assert conn.resp_body =~ "STALE"
+    end
+  end
+
   describe "strict_paths" do
     test "serves page when path is in manifest" do
       write_prerendered("/about", "<html>About</html>")

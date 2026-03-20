@@ -9,12 +9,18 @@ defmodule DemoWeb.StatusLive do
   """
   use DemoWeb, :live_view
 
+  import PhoenixPrerender.Components
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
       :timer.send_interval(1000, self(), :tick)
     end
 
+    # generated_at is computed on every mount. When the plug serves
+    # prerendered HTML, <.prerendered> (phx-update="ignore") preserves
+    # the build-time value in the DOM — the connected re-mount value
+    # is computed but never applied to the DOM.
     {:ok,
      assign(socket,
        generated_at: DateTime.utc_now() |> Calendar.strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -48,10 +54,12 @@ defmodule DemoWeb.StatusLive do
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <p class="text-sm text-gray-500 mb-1">Page Generated At</p>
-          <p class="text-xl font-mono font-bold text-amber-700">{@generated_at}</p>
+          <.prerendered id="generated-at" tag="p" class="text-xl font-mono font-bold text-amber-700">
+            {@generated_at}
+          </.prerendered>
           <p class="text-xs text-gray-400 mt-2">
-            This timestamp was frozen when the page was rendered.
-            With ISR, it updates when the page is regenerated in the background.
+            This timestamp was frozen when the page was prerendered.
+            With ISR, it updates only when the page is regenerated in the background.
           </p>
         </div>
         <div class="bg-white rounded-xl border border-gray-200 p-6">
@@ -148,13 +156,22 @@ defmodule DemoWeb.StatusLive do
 
       <%!-- Config --%>
       <div class="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-3">ISR Configuration</h3>
-        <pre class="code-block text-sm"><code>
-        config :phoenix_prerender,
-          enabled: true,
-          isr: true,
-          revalidate: 300  # seconds
-        </code></pre>
+        <h3 class="text-lg font-semibold text-gray-900 mb-3">This Route's Configuration</h3>
+        <pre class="code-block text-sm"><code># router.ex &mdash; ISR is opt-in per route
+          prerender do
+  live "/status", StatusLive, :index,
+    metadata: %&#123;prerender: :always, isr: true&#125;
+end
+
+# config/prod.exs
+config :phoenix_prerender,
+  enabled: true,
+  revalidate: 300  # seconds before stale</code></pre>
+        <p class="text-xs text-gray-400 mt-3">
+          The <code class="bg-gray-100 px-1 py-0.5 rounded">&lt;.prerendered&gt;</code>
+          component freezes the "Page Generated At" timestamp via
+          <code class="bg-gray-100 px-1 py-0.5 rounded">phx-update="ignore"</code>.
+        </p>
       </div>
     </div>
     """

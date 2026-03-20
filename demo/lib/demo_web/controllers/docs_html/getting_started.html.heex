@@ -31,7 +31,8 @@ end</code></pre>
       <h2 class="text-xl font-semibold text-gray-900">Mark Routes</h2>
     </div>
     <p class="text-gray-600 leading-relaxed mb-4">
-      Import the macro and wrap routes you want to prerender:
+      Import the macro and wrap routes you want to prerender. Dead views are prerendered by default.
+      LiveView routes require explicit metadata to control serving behavior:
     </p>
     <pre class="code-block text-sm"><code>import PhoenixPrerender
 
@@ -39,16 +40,24 @@ scope "/", MyAppWeb do
   pipe_through :browser
 
   prerender do
+    # Dead views: prerendered and served to everyone
     get "/about", PageController, :about
     get "/pricing", PageController, :pricing
-    live "/changelog", ChangelogLive
-  end
 
-  # Not prerendered
-  get "/contact", PageController, :contact
+    # LiveView: not prerendered (just live) unless metadata is set
+    live "/changelog", ChangelogLive
+
+    # LiveView: prerendered HTML served to bots for SEO
+    live "/status", StatusLive, :index,
+      metadata: %&#123;prerender: :bots_only&#125;
+
+    # LiveView: prerendered for everyone + ISR regeneration
+    live "/dashboard", DashboardLive, :index,
+      metadata: %&#123;prerender: :always, isr: true&#125;
+  end
 end</code></pre>
     <p class="mt-4 text-sm text-gray-500">
-      Or use the explicit syntax:
+      Or use the explicit syntax for dead views:
       <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">
         get "/about", PageController, :about, metadata: %&#123;prerender: true&#125;
       </code>
@@ -67,14 +76,23 @@ end</code></pre>
       Add <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">PhoenixPrerender.Plug</code>
       to your
       endpoint, <strong>before</strong>
-      the router:
+      the router. Pass <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">session_options</code>
+      if you use <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: :always</code>
+      on any LiveView route:
     </p>
     <pre class="code-block text-sm"><code># lib/my_app_web/endpoint.ex
+@session_options [
+  store: :cookie,
+  key: "_my_app_key",
+  signing_salt: "..."
+]
+
 plug Plug.Static, ...
 
-# Serve prerendered pages
-plug PhoenixPrerender.Plug
+# Serve prerendered pages (session_options enables CSRF swap for :always routes)
+plug PhoenixPrerender.Plug, session_options: @session_options
 
+plug Plug.Session, @session_options
 plug MyAppWeb.Router</code></pre>
   </div>
 

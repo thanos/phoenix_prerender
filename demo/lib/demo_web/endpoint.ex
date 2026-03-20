@@ -18,7 +18,7 @@ defmodule DemoWeb.Endpoint do
     gzip: false,
     only: DemoWeb.static_paths()
 
-  plug PhoenixPrerender.Plug
+  plug PhoenixPrerender.Plug, session_options: @session_options
 
   if code_reloading? do
     plug Phoenix.CodeReloader

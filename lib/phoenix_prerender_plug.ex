@@ -133,6 +133,8 @@ defmodule PhoenixPrerender.Plug do
   """
   @impl true
   def init(opts) do
+    session_options = Keyword.get(opts, :session_options)
+
     %{
       output_path: Keyword.get(opts, :output_path),
       url_style: Keyword.get(opts, :url_style),
@@ -140,7 +142,9 @@ defmodule PhoenixPrerender.Plug do
       enabled: Keyword.get(opts, :enabled),
       endpoint: Keyword.get(opts, :endpoint),
       strict_paths: Keyword.get(opts, :strict_paths),
-      bots_only: Keyword.get(opts, :bots_only)
+      bots_only: Keyword.get(opts, :bots_only),
+      session_init: session_options && Plug.Session.init(session_options),
+      csrf_init: session_options && Plug.CSRFProtection.init([])
     }
   end
 
@@ -221,15 +225,22 @@ defmodule PhoenixPrerender.Plug do
 
     entry = if strict_paths?(opts), do: manifest_entry(path, output_path), else: :no_manifest
 
-    cond do
-      strict_paths?(opts) and entry == nil ->
-        conn
+    if should_serve?(conn, opts, entry) do
+      do_serve(conn, path, output_path, url_style, cache_control, endpoint, entry, opts)
+    else
+      conn
+    end
+  end
 
-      not serve_to_client?(conn, opts, entry) ->
-        conn
+  defp should_serve?(conn, opts, entry) do
+    not (strict_paths?(opts) and entry == nil) and serve_to_client?(conn, opts, entry)
+  end
 
-      true ->
-        try_cache_then_disk(conn, path, output_path, url_style, cache_control, endpoint, entry)
+  defp do_serve(conn, path, output_path, url_style, cache_control, endpoint, entry, opts) do
+    if always_route?(entry) and opts.session_init != nil do
+      serve_with_fresh_session(conn, path, output_path, url_style, cache_control, endpoint, entry, opts)
+    else
+      try_cache_then_disk(conn, path, output_path, url_style, cache_control, endpoint, entry)
     end
   end
 
@@ -322,6 +333,64 @@ defmodule PhoenixPrerender.Plug do
         PhoenixPrerender.Regenerator.maybe_regenerate(path, endpoint)
       end
     end
+  end
+
+  # -- Always-route CSRF swap -----------------------------------------------
+
+  defp always_route?(%{"prerender_mode" => "always"}), do: true
+  defp always_route?(_), do: false
+
+  # For :always routes, establish a fresh session and CSRF token so that
+  # LiveView's WebSocket connection can validate successfully. The
+  # prerendered HTML is served with the stale CSRF meta tag replaced by
+  # a fresh one, and the response includes a valid session cookie.
+  defp serve_with_fresh_session(conn, path, output_path, url_style, cache_control, endpoint, entry, opts) do
+    html =
+      case try_cache(path) do
+        {:ok, html, metadata} ->
+          maybe_trigger_isr_from_cache(path, metadata, endpoint, entry)
+          html
+
+        :miss ->
+          read_from_disk(path, output_path, url_style, endpoint, entry)
+      end
+
+    if html do
+      conn = establish_session(conn, opts)
+      fresh_token = Plug.CSRFProtection.get_csrf_token()
+      html = replace_csrf_token(html, fresh_token)
+      send_prerendered_body(conn, html, path, cache_control, :disk)
+    else
+      conn
+    end
+  end
+
+  # sobelow_skip ["Traversal.FileModule"]
+  defp read_from_disk(path, output_path, url_style, endpoint, entry) do
+    file_path = PhoenixPrerender.Path.full_output_path(path, output_path, url_style)
+
+    if File.exists?(file_path) do
+      maybe_trigger_isr_from_disk(path, file_path, endpoint, entry)
+      File.read!(file_path)
+    else
+      nil
+    end
+  end
+
+  defp establish_session(conn, opts) do
+    conn
+    |> Plug.Session.call(opts.session_init)
+    |> Plug.Conn.fetch_session()
+    |> Plug.CSRFProtection.call(opts.csrf_init)
+  end
+
+  @csrf_meta_pattern ~r/<meta\s+name="csrf-token"\s+content="[^"]*"/
+  defp replace_csrf_token(html, fresh_token) do
+    Regex.replace(
+      @csrf_meta_pattern,
+      html,
+      ~s(<meta name="csrf-token" content="#{fresh_token}")
+    )
   end
 
   # -- Response helpers -----------------------------------------------------
