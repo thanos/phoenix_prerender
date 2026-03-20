@@ -238,7 +238,16 @@ defmodule PhoenixPrerender.Plug do
 
   defp do_serve(conn, path, output_path, url_style, cache_control, endpoint, entry, opts) do
     if always_route?(entry) and opts.session_init != nil do
-      serve_with_fresh_session(conn, path, output_path, url_style, cache_control, endpoint, entry, opts)
+      serve_with_fresh_session(
+        conn,
+        path,
+        output_path,
+        url_style,
+        cache_control,
+        endpoint,
+        entry,
+        opts
+      )
     else
       try_cache_then_disk(conn, path, output_path, url_style, cache_control, endpoint, entry)
     end
@@ -344,7 +353,16 @@ defmodule PhoenixPrerender.Plug do
   # LiveView's WebSocket connection can validate successfully. The
   # prerendered HTML is served with the stale CSRF meta tag replaced by
   # a fresh one, and the response includes a valid session cookie.
-  defp serve_with_fresh_session(conn, path, output_path, url_style, cache_control, endpoint, entry, opts) do
+  defp serve_with_fresh_session(
+         conn,
+         path,
+         output_path,
+         url_style,
+         cache_control,
+         endpoint,
+         entry,
+         opts
+       ) do
     html =
       case try_cache(path) do
         {:ok, html, metadata} ->
