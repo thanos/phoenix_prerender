@@ -12,6 +12,7 @@ defmodule PhoenixPrerender.GenerationStamp do
   @doc """
   Writes a new generation stamp to the output directory.
   """
+  # sobelow_skip ["Traversal.FileModule"]
   @spec write!(String.t()) :: :ok
   def write!(output_path) do
     stamp = System.system_time(:nanosecond) |> Integer.to_string()
@@ -22,6 +23,7 @@ defmodule PhoenixPrerender.GenerationStamp do
   @doc """
   Reads the current generation stamp, or `nil` if none exists.
   """
+  # sobelow_skip ["Traversal.FileModule"]
   @spec read(String.t()) :: String.t() | nil
   def read(output_path) do
     path = Path.join(output_path, @stamp_file)

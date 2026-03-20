@@ -182,7 +182,9 @@ defmodule PhoenixPrerender.Plug do
   defp strict_paths?(%{strict_paths: nil}), do: PhoenixPrerender.strict_paths()
   defp strict_paths?(%{strict_paths: value}), do: value
 
-  defp bots_only?(%{bots_only: nil}), do: Application.get_env(:phoenix_prerender, :bots_only, false)
+  defp bots_only?(%{bots_only: nil}),
+    do: Application.get_env(:phoenix_prerender, :bots_only, false)
+
   defp bots_only?(%{bots_only: value}), do: value
 
   defp serve_to_client?(conn, opts, entry) do
