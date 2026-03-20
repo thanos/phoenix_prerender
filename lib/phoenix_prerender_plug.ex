@@ -239,19 +239,34 @@ defmodule PhoenixPrerender.Plug do
   end
 
   defp do_serve(conn, path, output_path, url_style, cache_control, endpoint, entry, opts) do
-    if always_route?(entry) and opts.session_init != nil do
-      serve_with_fresh_session(
-        conn,
-        path,
-        output_path,
-        url_style,
-        cache_control,
-        endpoint,
-        entry,
-        opts
-      )
-    else
-      try_cache_then_disk(conn, path, output_path, url_style, cache_control, endpoint, entry)
+    cond do
+      always_route?(entry) and opts.session_init != nil ->
+        serve_with_fresh_session(
+          conn,
+          path,
+          output_path,
+          url_style,
+          cache_control,
+          endpoint,
+          entry,
+          opts
+        )
+
+      always_route?(entry) ->
+        # :always without session_options would serve stale CSRF tokens,
+        # breaking LiveView hydration. Pass through to the live app instead.
+        require Logger
+
+        Logger.warning(
+          "PhoenixPrerender: Skipping :always route #{path} — " <>
+            "session_options not configured in PhoenixPrerender.Plug. " <>
+            "Add session_options: @session_options to the plug to enable CSRF swap."
+        )
+
+        conn
+
+      true ->
+        try_cache_then_disk(conn, path, output_path, url_style, cache_control, endpoint, entry)
     end
   end
 
