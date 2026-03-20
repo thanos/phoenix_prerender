@@ -21,8 +21,7 @@
   cache_control: "public, max-age=300",
   strict_paths: true,
   concurrency: System.schedulers_online(),
-  isr: false,
-  revalidate: 300,
+  bots_only: false,
   base_url: "https://example.com",
   pubsub: nil</code></pre>
   </div>
@@ -66,19 +65,16 @@
           <td class="px-6 py-3 text-gray-600">Only serve paths listed in manifest.json</td>
         </tr>
         <tr>
+          <td class="px-6 py-3 font-mono text-purple-700">bots_only</td>
+          <td class="px-6 py-3 text-gray-500">false</td>
+          <td class="px-6 py-3 text-gray-600">
+            Global override: serve all prerendered pages to bots only. Prefer per-route metadata instead.
+          </td>
+        </tr>
+        <tr>
           <td class="px-6 py-3 font-mono text-purple-700">concurrency</td>
           <td class="px-6 py-3 text-gray-500">schedulers_online</td>
           <td class="px-6 py-3 text-gray-600">Parallel rendering tasks during generation</td>
-        </tr>
-        <tr>
-          <td class="px-6 py-3 font-mono text-purple-700">isr</td>
-          <td class="px-6 py-3 text-gray-500">false</td>
-          <td class="px-6 py-3 text-gray-600">Enable incremental static regeneration</td>
-        </tr>
-        <tr>
-          <td class="px-6 py-3 font-mono text-purple-700">revalidate</td>
-          <td class="px-6 py-3 text-gray-500">300</td>
-          <td class="px-6 py-3 text-gray-600">Seconds before a page is considered stale</td>
         </tr>
         <tr>
           <td class="px-6 py-3 font-mono text-purple-700">base_url</td>
@@ -94,6 +90,69 @@
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <%!-- Per-Route Metadata --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Per-Route Metadata</h2>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      Inside a <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code>
+      block,
+      dead views get
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: true</code>
+      injected automatically. LiveView routes pass through unchanged &mdash; use explicit metadata
+      to control prerendering:
+    </p>
+    <div class="overflow-hidden rounded-lg border border-gray-200 mb-4">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-gray-50 border-b border-gray-200">
+            <th class="text-left px-4 py-2 font-semibold text-gray-900">Metadata</th>
+            <th class="text-left px-4 py-2 font-semibold text-gray-900">Behavior</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <tr>
+            <td class="px-4 py-2 font-mono text-purple-700 text-xs">
+              %&#123;prerender: true&#125;
+            </td>
+            <td class="px-4 py-2 text-gray-600">
+              Served to all clients (default for dead views in prerender block)
+            </td>
+          </tr>
+          <tr>
+            <td class="px-4 py-2 font-mono text-purple-700 text-xs">
+              %&#123;prerender: :bots_only&#125;
+            </td>
+            <td class="px-4 py-2 text-gray-600">
+              Prerendered HTML served to search engine crawlers only; browsers get the live app
+            </td>
+          </tr>
+          <tr>
+            <td class="px-4 py-2 font-mono text-purple-700 text-xs">
+              %&#123;prerender: :always&#125;
+            </td>
+            <td class="px-4 py-2 text-gray-600">
+              Served to everyone with a fresh session and CSRF token (requires session_options)
+            </td>
+          </tr>
+          <tr>
+            <td class="px-4 py-2 font-mono text-purple-700 text-xs">%&#123;isr: true&#125;</td>
+            <td class="px-4 py-2 text-gray-600">
+              Enable per-route ISR; triggers background regeneration when stale
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="code-block text-sm"><code>prerender do
+  get "/about", PageController, :about                              # prerender: true (auto)
+  live "/changelog", ChangelogLive                                  # not prerendered
+  live "/status", StatusLive, :index,
+    metadata: %&#123;prerender: :bots_only&#125;                              # SEO only
+  live "/dashboard", DashboardLive, :index,
+    metadata: %&#123;prerender: :always, isr: true&#125;                      # everyone + ISR
+end</code></pre>
   </div>
 
   <%!-- URL Styles --%>
@@ -129,11 +188,37 @@
     </div>
   </div>
 
+  <%!-- Plug Options --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Plug Options</h2>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      Options passed directly to the plug override application config:
+    </p>
+    <pre class="code-block text-sm"><code># endpoint.ex
+@session_options [store: :cookie, key: "_app_key", signing_salt: "..."]
+
+plug PhoenixPrerender.Plug,
+  endpoint: MyAppWeb.Endpoint,            # required for ISR
+  session_options: @session_options,       # required for :always routes
+  output_path: "priv/static/prerendered",
+  url_style: :dir_index,
+  cache_control: "public, max-age=3600",
+  strict_paths: true,
+  enabled: true</code></pre>
+    <p class="text-sm text-gray-500 mt-4">
+      <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">session_options</code>
+      enables the CSRF token swap for
+      <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">prerender: :always</code>
+      routes. Without it, :always routes are served without a fresh session,
+      which will break LiveView's WebSocket connection.
+    </p>
+  </div>
+
   <%!-- ISR Config --%>
-  <div class="bg-amber-50 rounded-xl border border-amber-200 p-8">
+  <div class="bg-amber-50 rounded-xl border border-amber-200 p-8 mb-6">
     <h2 class="text-xl font-semibold text-amber-900 mb-4">ISR Configuration</h2>
     <p class="text-amber-800 text-sm leading-relaxed mb-4">
-      To enable incremental static regeneration, add the PageCache and Regenerator to your supervision tree
+      ISR is opt-in per route via metadata. Add the PageCache and Regenerator to your supervision tree,
       and pass the endpoint to the plug:
     </p>
     <pre class="code-block text-sm"><code># application.ex
@@ -143,11 +228,56 @@ children = [
 ]
 
 # endpoint.ex
-plug PhoenixPrerender.Plug, endpoint: MyAppWeb.Endpoint
+plug PhoenixPrerender.Plug,
+  endpoint: MyAppWeb.Endpoint,
+  session_options: @session_options
 
 # config/prod.exs
 config :phoenix_prerender,
-  isr: true,
-  revalidate: 300</code></pre>
+  enabled: true,
+  revalidate: 300  # seconds before a page is stale
+
+# router.ex &mdash; opt in per route
+prerender do
+  live "/status", StatusLive, :index,
+    metadata: %&#123;prerender: :always, isr: true&#125;
+end</code></pre>
+  </div>
+
+  <%!-- Prerendered Component --%>
+  <div class="bg-white rounded-xl border border-gray-200 p-8">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">&lt;.prerendered&gt; Component</h2>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      For LiveView pages with <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: :always</code>,
+      use the <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">&lt;.prerendered&gt;</code>
+      component to freeze values at prerender time. LiveView will not patch these elements after hydration.
+    </p>
+    <pre class="code-block text-sm"><code>import PhoenixPrerender.Components
+
+def mount(_params, _session, socket) do
+  # Only compute at prerender time (disconnected)
+  generated_at =
+    if connected?(socket),
+      do: "",
+      else: DateTime.utc_now() |> Calendar.strftime(...)
+
+  &#123;:ok, assign(socket, generated_at: generated_at)&#125;
+end
+
+def render(assigns) do
+  ~H"""
+  &lt;.prerendered id="gen-time" tag="p" class="font-mono"&gt;
+    &#123;&commat;generated_at&#125;
+  &lt;/.prerendered&gt;
+  """
+end</code></pre>
+    <p class="text-sm text-gray-500 mt-4">
+      Attributes: <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">id</code>
+      (required), <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">tag</code>
+      (default: "span"), <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">class</code>
+      (optional).
+      See the <a href="/status" class="text-amber-600 hover:text-amber-800 underline">/status</a>
+      page for a live demo.
+    </p>
   </div>
 </div>

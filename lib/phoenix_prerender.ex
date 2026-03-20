@@ -65,6 +65,11 @@ defmodule PhoenixPrerender do
         # Only serve paths listed in manifest.json
         strict_paths: true,
 
+        # Only serve prerendered pages to search engine crawlers.
+        # When true, browsers get passed through to the live app.
+        # Useful for LiveView routes where prerendered HTML is for SEO only.
+        bots_only: false,
+
         # PubSub server for distributed cache invalidation
         pubsub: nil,
 
@@ -76,13 +81,11 @@ defmodule PhoenixPrerender do
 
   ## Marking Routes
 
-  Routes are marked for prerendering by adding metadata in the router:
-
-      # Explicit metadata
-      get "/about", PageController, :about, metadata: %{prerender: true}
-      live "/docs/terms", TermsLive, :index, metadata: %{prerender: true}
-
-  Or using the `prerender/1` macro for convenience:
+  Routes are marked for prerendering by adding metadata in the router.
+  The `prerender/1` macro injects `metadata: %{prerender: true}` for
+  dead view routes (`get`, `post`, etc.) automatically. LiveView routes
+  pass through unchanged and require explicit metadata to control how
+  prerendered content is served:
 
       import PhoenixPrerender
 
@@ -90,9 +93,20 @@ defmodule PhoenixPrerender do
         pipe_through :browser
 
         prerender do
+          # Dead views: prerender: true injected automatically
           get "/about", PageController, :about
           get "/pricing", PageController, :pricing
-          live "/docs/terms", TermsLive
+
+          # LiveView: not prerendered unless metadata is set
+          live "/changelog", ChangelogLive
+
+          # LiveView: prerendered for SEO bots only
+          live "/status", StatusLive, :index,
+            metadata: %{prerender: :bots_only}
+
+          # LiveView: prerendered for everyone (requires session_options)
+          live "/dashboard", DashboardLive, :index,
+            metadata: %{prerender: :always, isr: true}
         end
       end
 
@@ -129,15 +143,16 @@ defmodule PhoenixPrerender do
   """
 
   @doc """
-  Wraps route definitions and injects `metadata: %{prerender: true}`.
+  Wraps route definitions and injects prerender metadata.
+
+  For dead view routes (`get`, `post`, `put`, `patch`, `delete`),
+  injects `metadata: %{prerender: true}` automatically. LiveView
+  routes (`live`) pass through unchanged — they require explicit
+  metadata to control serving behavior.
 
   This macro is used inside a Phoenix router `scope` block to mark
   multiple routes for prerendering without repeating the metadata option
-  on each route.
-
-  Supports `get`, `post`, `put`, `patch`, `delete`, and `live` route
-  definitions. Any other expressions in the block are passed through
-  unchanged.
+  on each dead view route.
 
   ## Example
 
@@ -152,6 +167,8 @@ defmodule PhoenixPrerender do
             get "/about", PageController, :about
             get "/pricing", PageController, :pricing
             live "/changelog", ChangelogLive
+            live "/status", StatusLive, :index,
+              metadata: %{prerender: :bots_only}
           end
 
           # This route is NOT prerendered
@@ -163,7 +180,15 @@ defmodule PhoenixPrerender do
 
       get "/about", PageController, :about, metadata: %{prerender: true}
       get "/pricing", PageController, :pricing, metadata: %{prerender: true}
-      live "/changelog", ChangelogLive, metadata: %{prerender: true}
+      live "/changelog", ChangelogLive                          # not prerendered
+      live "/status", StatusLive, :index, metadata: %{prerender: :bots_only}
+
+  LiveView routes inside the block are passed through as-is. Use
+  explicit metadata to opt in:
+
+    * `metadata: %{prerender: :bots_only}` — serve to crawlers only
+    * `metadata: %{prerender: :always}` — serve to everyone (needs session_options)
+    * `metadata: %{prerender: :always, isr: true}` — with ISR regeneration
   """
   defmacro prerender(do: block) do
     inject_prerender_private(block)
@@ -181,9 +206,7 @@ defmodule PhoenixPrerender do
     {verb, meta, append_private(args)}
   end
 
-  defp inject_single({:live, meta, args}) do
-    {:live, meta, append_private(args)}
-  end
+  defp inject_single({:live, _meta, _args} = expr), do: expr
 
   defp inject_single(other), do: other
 

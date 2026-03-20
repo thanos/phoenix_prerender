@@ -118,10 +118,10 @@ defmodule PhoenixPrerender.Generator do
     url_style = Keyword.get(opts, :url_style, PhoenixPrerender.url_style())
     concurrency = Keyword.get(opts, :concurrency, PhoenixPrerender.concurrency())
 
-    paths =
+    routes =
       case Keyword.get(opts, :paths) do
-        nil -> PhoenixPrerender.Route.paths(router)
-        explicit -> explicit
+        nil -> PhoenixPrerender.Route.discover(router)
+        explicit -> Enum.map(explicit, &%{path: &1, prerender_mode: true, isr: false})
       end
 
     File.mkdir_p!(output_path)
@@ -129,9 +129,15 @@ defmodule PhoenixPrerender.Generator do
     start_time = System.monotonic_time()
 
     results =
-      paths
+      routes
       |> Task.async_stream(
-        fn path -> generate_page(endpoint, path, output_path, url_style) end,
+        fn route ->
+          result = generate_page(endpoint, route.path, output_path, url_style)
+
+          result
+          |> Map.put(:prerender_mode, route.prerender_mode)
+          |> Map.put(:isr, route.isr)
+        end,
         max_concurrency: concurrency,
         timeout: :infinity
       )

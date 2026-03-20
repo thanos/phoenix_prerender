@@ -12,7 +12,6 @@
       class="block bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition group"
     >
       <div class="flex items-center justify-between mb-3">
-        <span class="text-2xl">&#128640;</span>
         <span class="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-medium">
           Guide
         </span>
@@ -30,7 +29,6 @@
       class="block bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition group"
     >
       <div class="flex items-center justify-between mb-3">
-        <span class="text-2xl">&#128220;</span>
         <span class="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-medium">
           Reference
         </span>
@@ -39,18 +37,21 @@
         Configuration Reference
       </h3>
       <p class="mt-2 text-sm text-gray-500">
-        All configuration options, URL styles, ISR settings, and advanced options explained.
+        All configuration options, per-route metadata, URL styles, ISR settings, and CSRF swap explained.
       </p>
     </a>
   </div>
 
-  <div class="bg-white rounded-xl border border-gray-200 p-8">
+  <div class="bg-white rounded-xl border border-gray-200 p-8 mb-6">
     <h2 class="text-xl font-semibold text-gray-900 mb-4">Scoped Prerendering</h2>
     <p class="text-gray-600 leading-relaxed mb-4">
-      All documentation pages are prerendered using a scoped route block. This demonstrates how
-      PhoenixPrerender handles nested routes under a common prefix.
+      All documentation pages are prerendered using a scoped route block. Dead views inside
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender do</code>
+      automatically get
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender: true</code>
+      injected. LiveView routes pass through unchanged and require explicit metadata.
     </p>
-    <pre class="code-block text-sm"><code># Scoped prerendered routes
+    <pre class="code-block text-sm"><code># Scoped prerendered routes (dead views)
 scope "/docs", DemoWeb do
   pipe_through :browser
 
@@ -59,13 +60,44 @@ scope "/docs", DemoWeb do
     get "/getting-started", DocsController, :getting_started
     get "/terms", DocsController, :terms
   end
+end
+
+# LiveView routes with per-route metadata
+scope "/", DemoWeb do
+  pipe_through :browser
+
+  prerender do
+    live "/changelog", ChangelogLive, :index,
+      metadata: %&#123;prerender: :bots_only&#125;
+    live "/status", StatusLive, :index,
+      metadata: %&#123;prerender: :always, isr: true&#125;
+  end
 end</code></pre>
     <p class="mt-4 text-sm text-gray-500">
       Route discovery uses
       <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">Phoenix.Router.routes/1</code>
-      and reads the <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">metadata</code>
-      map.
-      Scope prefixes are automatically applied to the canonical path.
+      and matches any truthy value for the
+      <code class="bg-gray-100 px-1 py-0.5 rounded text-xs">:prerender</code>
+      metadata key. Scope prefixes are automatically applied to the canonical path.
     </p>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 p-8">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Manifest-Driven Serving</h2>
+    <p class="text-gray-600 leading-relaxed mb-4">
+      After generation, each page's
+      <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">prerender_mode</code>
+      and <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">isr</code>
+      flag are written to <code class="text-sm bg-gray-100 px-1.5 py-0.5 rounded">manifest.json</code>.
+      At serve time, the plug reads these values to decide per-route behavior:
+    </p>
+    <ul class="space-y-2 text-sm text-gray-600 ml-4">
+      <li><strong>prerender_mode: "true"</strong> &mdash; serve to all clients</li>
+      <li><strong>prerender_mode: "bots_only"</strong> &mdash; serve only to crawlers</li>
+      <li>
+        <strong>prerender_mode: "always"</strong> &mdash; serve to all with fresh CSRF token
+      </li>
+      <li><strong>isr: true</strong> &mdash; trigger background regeneration when stale</li>
+    </ul>
   </div>
 </div>

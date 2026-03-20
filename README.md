@@ -4,6 +4,8 @@ Static prerendering and incremental static regeneration (ISR) for Phoenix applic
 
 Generate static HTML from your Phoenix routes at build time, serve them instantly from disk in production, and keep them fresh with background regeneration — similar to Next.js ISR or SvelteKit prerendering, but built for the BEAM.
 
+See the features in action at the [**Live demo**](https://demo-muddy-river-958.fly.dev/)
+
 ## Contents
 
 - [Features](#features)

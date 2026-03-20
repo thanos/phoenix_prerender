@@ -24,6 +24,10 @@ defmodule PhoenixPrerenderWeb.Router do
     scope "/docs" do
       get "/terms", PageController, :terms, metadata: %{prerender: true}
     end
+
+    # LiveView routes with per-route prerender modes
+    live "/changelog", ChangelogLive, :index, metadata: %{prerender: :bots_only}
+    live "/status", StatusLive, :index, metadata: %{prerender: :always, isr: true}
   end
 
   # Other scopes may use custom stacks.

@@ -9,6 +9,10 @@ defmodule PhoenixPrerender.PlugTest do
     File.rm_rf!(@output_path)
     File.mkdir_p!(@output_path)
 
+    # Clear cached manifest between tests
+    :persistent_term.erase({PrerenderPlug, :manifest})
+    :persistent_term.erase({PrerenderPlug, :generation_stamp})
+
     on_exit(fn -> File.rm_rf!(@output_path) end)
 
     :ok
@@ -533,6 +537,327 @@ defmodule PhoenixPrerender.PlugTest do
 
       assert conn.halted
       assert conn.status == 200
+    end
+  end
+
+  describe "bots_only option (global)" do
+    test "passes through browser requests when bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(bots_only: true)
+
+      refute conn.halted
+    end
+
+    test "serves prerendered page to Googlebot when bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header(
+          "user-agent",
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        )
+        |> call_plug(bots_only: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "serves prerendered page to Bingbot when bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header(
+          "user-agent",
+          "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"
+        )
+        |> call_plug(bots_only: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "serves to all clients when bots_only is false" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(bots_only: false)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "passes through when no user-agent header and bots_only is true" do
+      write_prerendered("/about", "<html>About</html>")
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(bots_only: true)
+
+      refute conn.halted
+    end
+  end
+
+  describe "per-route bots_only from manifest" do
+    test "passes through browser request for bots_only route in manifest" do
+      write_prerendered("/changelog", "<html>Changelog</html>")
+
+      write_manifest([
+        %{
+          path: "/changelog",
+          file: "changelog/index.html",
+          size: 25,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :bots_only
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/changelog")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      refute conn.halted
+    end
+
+    test "serves bots_only route to Googlebot" do
+      write_prerendered("/changelog", "<html>Changelog</html>")
+
+      write_manifest([
+        %{
+          path: "/changelog",
+          file: "changelog/index.html",
+          size: 25,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :bots_only
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/changelog")
+        |> put_req_header(
+          "user-agent",
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        )
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "serves route with prerender_mode true to browsers" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: true
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "passes through :always route without session_options" do
+      write_prerendered("/yolo", "<html>Yolo</html>")
+
+      write_manifest([
+        %{
+          path: "/yolo",
+          file: "yolo/index.html",
+          size: 18,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/yolo")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      # Without session_options, :always routes pass through to the live app
+      refute conn.halted
+    end
+
+    test "old manifest without prerender_mode serves to all (backward compat)" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z"
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true)
+
+      assert conn.halted
+      assert conn.status == 200
+    end
+
+    test "global bots_only overrides per-route true mode" do
+      write_prerendered("/about", "<html>About</html>")
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 20,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: true
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        |> call_plug(strict_paths: true, bots_only: true)
+
+      refute conn.halted
+    end
+  end
+
+  describe "always route CSRF swap" do
+    @session_options [
+      store: :cookie,
+      key: "_test_key",
+      signing_salt: "test_salt"
+    ]
+
+    @secret_key_base "7gxSatdPcoYif01OEVvjugvVp/Bzb855PHi7onXPBngutD03s24S7y0iP5yJwTzg"
+
+    @stale_html ~s(<html><head><meta name="csrf-token" content="STALE_TOKEN_FROM_BUILD"/></head><body>Status</body></html>)
+
+    defp build_conn_with_secret(method, path) do
+      build_conn(method, path)
+      |> Map.put(:secret_key_base, @secret_key_base)
+    end
+
+    test "replaces stale CSRF token with fresh one for :always route" do
+      write_prerendered("/status", @stale_html)
+
+      write_manifest([
+        %{
+          path: "/status",
+          file: "status/index.html",
+          size: 100,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      conn =
+        build_conn_with_secret(:get, "/status")
+        |> call_plug(strict_paths: true, session_options: @session_options)
+
+      assert conn.halted
+      assert conn.status == 200
+      refute conn.resp_body =~ "STALE_TOKEN_FROM_BUILD"
+      assert conn.resp_body =~ ~r/<meta name="csrf-token" content="[^"]+"/
+    end
+
+    test "sets session cookie for :always route" do
+      write_prerendered("/status", @stale_html)
+
+      write_manifest([
+        %{
+          path: "/status",
+          file: "status/index.html",
+          size: 100,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      conn =
+        build_conn_with_secret(:get, "/status")
+        |> call_plug(strict_paths: true, session_options: @session_options)
+
+      assert conn.halted
+
+      set_cookie =
+        conn.resp_headers
+        |> Enum.filter(fn {k, _} -> k == "set-cookie" end)
+        |> Enum.map(fn {_, v} -> v end)
+
+      assert Enum.any?(set_cookie, &String.starts_with?(&1, "_test_key="))
+    end
+
+    test "passes through :always route when session_options not configured" do
+      write_prerendered("/status", @stale_html)
+
+      write_manifest([
+        %{
+          path: "/status",
+          file: "status/index.html",
+          size: 100,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: :always
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/status")
+        |> call_plug(strict_paths: true)
+
+      # Without session_options, :always routes pass through to the live app
+      refute conn.halted
+    end
+
+    test "does not swap CSRF for non-always routes" do
+      stale_html =
+        ~s(<html><head><meta name="csrf-token" content="STALE"/></head><body>About</body></html>)
+
+      write_prerendered("/about", stale_html)
+
+      write_manifest([
+        %{
+          path: "/about",
+          file: "about/index.html",
+          size: 80,
+          checksum: "abc",
+          generated_at: "2024-01-01T00:00:00Z",
+          prerender_mode: true
+        }
+      ])
+
+      conn =
+        build_conn(:get, "/about")
+        |> call_plug(strict_paths: true, session_options: @session_options)
+
+      assert conn.halted
+      assert conn.resp_body =~ "STALE"
     end
   end
 end

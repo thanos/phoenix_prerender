@@ -125,16 +125,26 @@ defmodule PhoenixPrerender.Plug do
       regeneration (default: `nil`)
     * `:strict_paths` -- only serve paths listed in `manifest.json`
       (default: from application config, defaults to `true`)
+    * `:bots_only` -- only serve prerendered pages to search engine
+      crawlers. Regular browsers are passed through to the live app.
+      Essential for LiveView routes where prerendered HTML contains
+      stale session data. (default: from application config, defaults
+      to `false`)
   """
   @impl true
   def init(opts) do
+    session_options = Keyword.get(opts, :session_options)
+
     %{
       output_path: Keyword.get(opts, :output_path),
       url_style: Keyword.get(opts, :url_style),
       cache_control: Keyword.get(opts, :cache_control),
       enabled: Keyword.get(opts, :enabled),
       endpoint: Keyword.get(opts, :endpoint),
-      strict_paths: Keyword.get(opts, :strict_paths)
+      strict_paths: Keyword.get(opts, :strict_paths),
+      bots_only: Keyword.get(opts, :bots_only),
+      session_init: session_options && Plug.Session.init(session_options),
+      csrf_init: session_options && Plug.CSRFProtection.init([])
     }
   end
 
@@ -148,6 +158,15 @@ defmodule PhoenixPrerender.Plug do
   When ISR is enabled, stale content is served immediately while a
   background task regenerates the page.
   """
+  # Common search engine crawler user-agent patterns (case-insensitive).
+  @bot_patterns ~w(
+    googlebot bingbot yandexbot duckduckbot baiduspider
+    slurp sogou facebookexternalhit twitterbot linkedinbot
+    whatsapp telegrambot applebot amazonbot bytespider
+    gptbot claudebot petalbot semrushbot ahrefsbot
+    mj12bot dotbot rogerbot screaming\ frog
+  )
+
   @impl true
   def call(conn, opts) do
     if enabled?(opts) do
@@ -162,6 +181,31 @@ defmodule PhoenixPrerender.Plug do
 
   defp strict_paths?(%{strict_paths: nil}), do: PhoenixPrerender.strict_paths()
   defp strict_paths?(%{strict_paths: value}), do: value
+
+  defp bots_only?(%{bots_only: nil}),
+    do: Application.get_env(:phoenix_prerender, :bots_only, false)
+
+  defp bots_only?(%{bots_only: value}), do: value
+
+  defp serve_to_client?(conn, opts, entry) do
+    cond do
+      bots_only?(opts) -> bot_request?(conn)
+      bots_only_route?(entry) -> bot_request?(conn)
+      true -> true
+    end
+  end
+
+  defp bots_only_route?(%{"prerender_mode" => "bots_only"}), do: true
+  defp bots_only_route?(_), do: false
+
+  defp bot_request?(conn) do
+    conn
+    |> Plug.Conn.get_req_header("user-agent")
+    |> Enum.any?(fn ua ->
+      ua_down = String.downcase(ua)
+      Enum.any?(@bot_patterns, &String.contains?(ua_down, &1))
+    end)
+  end
 
   defp serve_prerendered(conn, opts) do
     path = PhoenixPrerender.Path.normalize(conn.request_path)
@@ -179,27 +223,110 @@ defmodule PhoenixPrerender.Plug do
     cache_control = opts.cache_control || PhoenixPrerender.cache_control()
     endpoint = opts.endpoint
 
-    if strict_paths?(opts) and not path_in_manifest?(path, output_path) do
-      conn
-    else
-      # Try cache first, then disk
-      case try_cache(path) do
-        {:ok, html, metadata} ->
-          maybe_trigger_isr_from_cache(path, metadata, endpoint)
-          send_prerendered_body(conn, html, path, cache_control, :cache)
+    maybe_invalidate_cache(output_path)
 
-        :miss ->
-          try_disk(conn, path, output_path, url_style, cache_control, endpoint)
+    entry = if strict_paths?(opts), do: manifest_entry(path, output_path), else: :no_manifest
+
+    if should_serve?(conn, opts, entry) do
+      do_serve(conn, path, output_path, url_style, cache_control, endpoint, entry, opts)
+    else
+      conn
+    end
+  end
+
+  defp should_serve?(conn, opts, entry) do
+    not (strict_paths?(opts) and entry == nil) and serve_to_client?(conn, opts, entry)
+  end
+
+  defp do_serve(conn, path, output_path, url_style, cache_control, endpoint, entry, opts) do
+    cond do
+      always_route?(entry) and opts.session_init != nil ->
+        serve_with_fresh_session(
+          conn,
+          path,
+          output_path,
+          url_style,
+          cache_control,
+          endpoint,
+          entry,
+          opts
+        )
+
+      always_route?(entry) ->
+        # :always without session_options would serve stale CSRF tokens,
+        # breaking LiveView hydration. Pass through to the live app instead.
+        require Logger
+
+        Logger.warning(
+          "PhoenixPrerender: Skipping :always route #{path} — " <>
+            "session_options not configured in PhoenixPrerender.Plug. " <>
+            "Add session_options: @session_options to the plug to enable CSRF swap."
+        )
+
+        conn
+
+      true ->
+        try_cache_then_disk(conn, path, output_path, url_style, cache_control, endpoint, entry)
+    end
+  end
+
+  defp try_cache_then_disk(conn, path, output_path, url_style, cache_control, endpoint, entry) do
+    case try_cache(path) do
+      {:ok, html, metadata} ->
+        maybe_trigger_isr_from_cache(path, metadata, endpoint, entry)
+        send_prerendered_body(conn, html, path, cache_control, :cache)
+
+      :miss ->
+        try_disk(conn, path, output_path, url_style, cache_control, endpoint, entry)
+    end
+  end
+
+  # Checks if the generation stamp has changed since the last request.
+  # If it has, clears the ETS page cache so fresh files are read from disk.
+  # Uses :persistent_term to store the last-seen stamp across all processes.
+  defp maybe_invalidate_cache(output_path) do
+    current = PhoenixPrerender.GenerationStamp.read(output_path)
+
+    if current do
+      last_seen = :persistent_term.get({__MODULE__, :generation_stamp}, nil)
+
+      if last_seen != nil and last_seen != current do
+        PhoenixPrerender.PageCache.clear()
+        :persistent_term.erase({__MODULE__, :manifest})
+      end
+
+      if last_seen != current do
+        :persistent_term.put({__MODULE__, :generation_stamp}, current)
       end
     end
+  rescue
+    ArgumentError -> :ok
+  catch
+    :exit, _ -> :ok
   end
 
   # -- Strict paths (manifest check) ----------------------------------------
 
-  defp path_in_manifest?(path, output_path) do
+  defp manifest_entry(path, output_path) do
+    manifest = cached_manifest(output_path)
+    if manifest, do: PhoenixPrerender.Manifest.lookup(manifest, path), else: nil
+  end
+
+  defp cached_manifest(output_path) do
+    case :persistent_term.get({__MODULE__, :manifest}, :miss) do
+      :miss -> load_and_cache_manifest(output_path)
+      manifest -> manifest
+    end
+  end
+
+  defp load_and_cache_manifest(output_path) do
     case PhoenixPrerender.Manifest.read(output_path) do
-      {:ok, manifest} -> PhoenixPrerender.Manifest.lookup(manifest, path) != nil
-      {:error, _} -> false
+      {:ok, manifest} ->
+        :persistent_term.put({__MODULE__, :manifest}, manifest)
+        manifest
+
+      {:error, _} ->
+        nil
     end
   end
 
@@ -212,8 +339,8 @@ defmodule PhoenixPrerender.Plug do
     ArgumentError -> :miss
   end
 
-  defp maybe_trigger_isr_from_cache(path, metadata, endpoint) do
-    if isr_enabled?() and endpoint do
+  defp maybe_trigger_isr_from_cache(path, metadata, endpoint, entry) do
+    if isr_for_route?(entry) and endpoint do
       revalidate = PhoenixPrerender.Regenerator.revalidate_interval()
 
       if cache_entry_stale?(metadata, revalidate) do
@@ -232,23 +359,90 @@ defmodule PhoenixPrerender.Plug do
 
   # -- Disk layer -----------------------------------------------------------
 
-  defp try_disk(conn, path, output_path, url_style, cache_control, endpoint) do
+  defp try_disk(conn, path, output_path, url_style, cache_control, endpoint, entry) do
     file_path = PhoenixPrerender.Path.full_output_path(path, output_path, url_style)
 
     if File.exists?(file_path) do
-      maybe_trigger_isr_from_disk(path, file_path, endpoint)
+      maybe_trigger_isr_from_disk(path, file_path, endpoint, entry)
       send_prerendered_file(conn, file_path, path, cache_control)
     else
       conn
     end
   end
 
-  defp maybe_trigger_isr_from_disk(path, file_path, endpoint) do
-    if isr_enabled?() and endpoint do
+  defp maybe_trigger_isr_from_disk(path, file_path, endpoint, entry) do
+    if isr_for_route?(entry) and endpoint do
       if PhoenixPrerender.Regenerator.file_stale?(file_path) do
         PhoenixPrerender.Regenerator.maybe_regenerate(path, endpoint)
       end
     end
+  end
+
+  # -- Always-route CSRF swap -----------------------------------------------
+
+  defp always_route?(%{"prerender_mode" => "always"}), do: true
+  defp always_route?(_), do: false
+
+  # For :always routes, establish a fresh session and CSRF token so that
+  # LiveView's WebSocket connection can validate successfully. The
+  # prerendered HTML is served with the stale CSRF meta tag replaced by
+  # a fresh one, and the response includes a valid session cookie.
+  defp serve_with_fresh_session(
+         conn,
+         path,
+         output_path,
+         url_style,
+         cache_control,
+         endpoint,
+         entry,
+         opts
+       ) do
+    html =
+      case try_cache(path) do
+        {:ok, html, metadata} ->
+          maybe_trigger_isr_from_cache(path, metadata, endpoint, entry)
+          html
+
+        :miss ->
+          read_from_disk(path, output_path, url_style, endpoint, entry)
+      end
+
+    if html do
+      conn = establish_session(conn, opts)
+      fresh_token = Plug.CSRFProtection.get_csrf_token()
+      html = replace_csrf_token(html, fresh_token)
+      send_prerendered_body(conn, html, path, cache_control, :disk)
+    else
+      conn
+    end
+  end
+
+  # sobelow_skip ["Traversal.FileModule"]
+  defp read_from_disk(path, output_path, url_style, endpoint, entry) do
+    file_path = PhoenixPrerender.Path.full_output_path(path, output_path, url_style)
+
+    if File.exists?(file_path) do
+      maybe_trigger_isr_from_disk(path, file_path, endpoint, entry)
+      File.read!(file_path)
+    else
+      nil
+    end
+  end
+
+  defp establish_session(conn, opts) do
+    conn
+    |> Plug.Session.call(opts.session_init)
+    |> Plug.Conn.fetch_session()
+    |> Plug.CSRFProtection.call(opts.csrf_init)
+  end
+
+  @csrf_meta_pattern ~r/<meta\s+name="csrf-token"\s+content="[^"]*"/
+  defp replace_csrf_token(html, fresh_token) do
+    Regex.replace(
+      @csrf_meta_pattern,
+      html,
+      ~s(<meta name="csrf-token" content="#{fresh_token}")
+    )
   end
 
   # -- Response helpers -----------------------------------------------------
@@ -321,9 +515,12 @@ defmodule PhoenixPrerender.Plug do
     |> Plug.Conn.halt()
   end
 
-  defp isr_enabled? do
-    PhoenixPrerender.Regenerator.isr_enabled?()
-  end
+  # Per-route ISR: check manifest entry first, fall back to global config.
+  # Manifest entries have "isr" => true/false.
+  # :no_manifest means strict_paths is off — fall back to global.
+  defp isr_for_route?(%{"isr" => true}), do: true
+  defp isr_for_route?(%{"isr" => _}), do: false
+  defp isr_for_route?(_), do: PhoenixPrerender.Regenerator.isr_enabled?()
 
   # -- Encoding negotiation ---------------------------------------------------
 

@@ -1,5 +1,8 @@
 import Config
 
+config :phoenix_prerender,
+  enabled: System.get_env("PRERENDER_ENABLED", "true") == "true"
+
 if config_env() == :prod do
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||
@@ -9,6 +12,7 @@ if config_env() == :prod do
   port = String.to_integer(System.get_env("PORT") || "4000")
 
   config :demo, DemoWeb.Endpoint,
+    server: true,
     url: [host: host, port: 443, scheme: "https"],
     http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: port],
     secret_key_base: secret_key_base

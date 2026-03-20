@@ -10,7 +10,8 @@ config :demo, DemoWeb.Endpoint,
   watchers: []
 
 config :phoenix_prerender,
-  enabled: true
+  enabled: true,
+  cache_control: "no-cache, no-store"
 
 config :logger, :console, format: "[$level] $message\n"
 config :phoenix, :stacktrace_depth, 20
